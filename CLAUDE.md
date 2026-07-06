@@ -13,8 +13,15 @@ CubeX Academy (a.k.a. "Cubify") — an interactive 3D Rubik's cube built with Re
 - `npm run preview` — serve the built bundle
 - `npm run lint` — **type-check only** (`tsc --noEmit`); there is no ESLint and no test suite
 - `npm run clean` — remove `dist` and `server.js`
+- `npm run deploy` — build + deploy to **Firebase Hosting** (`npx firebase-tools deploy --only hosting`)
 
 There is no test *suite*, but the cube math lives in a pure module (`src/lib/cube-engine.ts`) that can be round-tripped in Node: `npx tsx <script>.ts` — **run from the repo root** so `node_modules` (incl. `rubiks-cube-solver`) resolves; a scratchpad path won't. Round-trip pattern: solved → scramble → `getFacelets` → `solver()` → `translateSolverSequence` → `applyMove` → assert `isSolved`. `npm run lint` only catches type errors.
+
+To drive the running app for visual/UX checks, use the **Playwright MCP** — the chrome-devtools MCP errors out when a Chrome profile is already running. For the drill, read the top progress-bar button classes (`bg-success`/`bg-danger`/`bg-brand-soft`) to assert green/red/current.
+
+## Deploy
+
+`firebase.json` configures Firebase Hosting (`public: dist`, SPA rewrite → `index.html`, `predeploy` runs `npm run build`). `.firebaserc` is **not committed** — run `firebase use --add` once to bind a project. Because `.env` is gitignored, a deploy from a fresh clone/CI inlines the **default** `VITE_*` gameplay vars, not your local ones. (An older Cloud Run path via `server.js`/`express` also exists but isn't used by Hosting.)
 
 ## Environment notes
 
@@ -39,6 +46,8 @@ Three coordinating pieces:
 **Timer flow is split intentionally:** `App.tsx`'s `handleMoveStart`/`handleMoveEnd` decide *when* to start/stop the timer (freeplay only, ignoring scramble moves via the `isScrambling` ref), while `store.ts` holds the timer state and `UI.tsx` drives the tick. **Freeplay** scramble = 20 animated random moves through the `executeMove` queue. **Learning** scramble (`setupLearning`) applies 25 random moves *instantly* (`applyInstant`), then `buildSolution(getFacelets())` computes the guided steps; Reset retries the same scramble.
 
 `RobotHand` (`Hands.tsx`) is purely decorative — box-geometry hands that twist in sync with the active R/L move's `progress`.
+
+**Fire-once "pulse" events (store):** `wrongPulse` and `masteredPulse` are counters bumped on an event (a wrong drill move; a stage auto-mastered by finishing its last drill step). Effects latch the payload (`masteredStage`) and react once per bump — `Cube.tsx` shakes the cube on `wrongPulse` (Tutorial only), and **`StageCameraDirector.tsx`** flies a cinematic camera tour on `masteredPulse` (gated by `cameraAnimationsEnabled` and by `isRotating` going false). The director drives the drei `<OrbitControls makeDefault>` via `useThree`, so don't add a second camera controller.
 
 ## Conventions
 

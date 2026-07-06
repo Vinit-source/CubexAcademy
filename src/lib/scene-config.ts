@@ -55,4 +55,35 @@ export const SCENE = {
     amplitude: 0.35,
     frequency: 9,
   },
+
+  /**
+   * Auto camera tour played when a CFOP stage is mastered (see StageCameraDirector).
+   * Spherical coords are relative to `target`: `phi` = polar angle from +Y (keep within
+   * (0, ~2.7); π is a degenerate straight-under view), `theta` = azimuth, `radius` clamped
+   * to OrbitControls' [4, 12]. Each stage flies to a FOCUS pose framing the face it completes
+   * (Cross/F2L on top/white, OLL/PLL dip under to the bottom last layer), then a universal
+   * `survey` helical orbit reveals all six faces before the camera returns to rest.
+   */
+  stageCamera: {
+    target: [0, -0.5, 0] as [number, number, number], // cube center (matches the group offset)
+    flyDuration: 1.2,
+    holdDuration: 1.3,
+    returnDuration: 1.2,
+    // Per-stage focus pose. `targetY` nudges the look-at point toward the relevant face.
+    cross: { phi: 0.55, theta: 0.6, radius: 6.5, targetY: 0.3 }, // look DOWN at the white cross (U/top)
+    f2l: { phi: 1.15, theta: 0.6, radius: 7.0, targetY: 0.1 }, // high 3/4 toward the top two layers
+    oll: { phi: 2.35, theta: 0.6, radius: 6.5, targetY: -1.1 }, // dip under, look UP at last layer (D/bottom)
+    pll: { phi: 2.3, theta: 0.6, radius: 6.8, targetY: -1.1 }, // dip under, look UP at last layer (D/bottom)
+    // Universal "show me every face" survey: a helical 360° orbit that tilts up and down so
+    // the top, bottom and all four sides pass through view. phi = polarMid + polarAmp*sin(2π·t).
+    survey: {
+      toSurveyDuration: 0.6, // smooth glide from the focus pose into the orbit start
+      duration: 4.0, // one full sweep
+      pauseDuration: 1.2, // hold after the survey, before returning to rest
+      radius: 8.5, // pulled back so the whole cube stays framed
+      polarMid: 1.35,
+      polarAmp: 0.85,
+      turns: 1, // azimuth revolutions
+    },
+  },
 } as const;

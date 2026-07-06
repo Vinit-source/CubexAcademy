@@ -10,6 +10,7 @@ import { BookOpen } from 'lucide-react';
 import { RubiksCube } from './components/Cube';
 import { UI } from './components/UI';
 import { GuideModal } from './components/GuideModal';
+import { StageCameraDirector } from './components/StageCameraDirector';
 import { useStore, buildSolution } from './store';
 import { CONFIG } from './lib/config';
 import { parseMoves, formatMove, formatMoves, type Move } from './lib/cube-engine';
@@ -236,6 +237,9 @@ export default function App() {
               maxDistance={12}
               makeDefault
             />
+
+            {/* Drives the camera on a tour when a CFOP stage is mastered. */}
+            <StageCameraDirector />
           </Canvas>
         </UI>
       </main>

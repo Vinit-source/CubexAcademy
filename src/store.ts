@@ -102,6 +102,18 @@ interface AppState {
   setCurrentStep: (index: number) => void;
   advanceStep: () => void;
 
+  // Fire-once event emitted when a stage is *auto-mastered* by finishing its last
+  // drill step (not when a "Stages Mastered" chip is toggled manually). The camera
+  // director latches `masteredStage` and flies once per `masteredPulse` bump.
+  // Mirrors the `wrongPulse` pattern below.
+  masteredStage: Stage | null;
+  masteredPulse: number;
+
+  // Whether the auto camera tour plays when a stage is mastered (toggled from the
+  // canvas settings popover). Off = mastering a stage never moves the camera.
+  cameraAnimationsEnabled: boolean;
+  setCameraAnimationsEnabled: (v: boolean) => void;
+
   // Manual-drill progress within the current step: how many of the step's moves
   // the user has correctly performed. `wrongPulse` increments on a wrong move so
   // the UI can flash the bar red (and the cube can shake in Tutorial mode).
@@ -149,6 +161,10 @@ export const useStore = create<AppState>((set, get) => ({
 
   solutionSteps: [],
   currentStepIndex: 0,
+  masteredStage: null,
+  masteredPulse: 0,
+  cameraAnimationsEnabled: true,
+  setCameraAnimationsEnabled: (v) => set({ cameraAnimationsEnabled: v }),
   setSolution: (steps) => set({ solutionSteps: steps, currentStepIndex: 0, actionIndex: 0 }),
   setCurrentStep: (index) => set({ currentStepIndex: index, actionIndex: 0 }),
   // Advances up to one-past-the-last step; that terminal index is the cube's
@@ -161,14 +177,23 @@ export const useStore = create<AppState>((set, get) => ({
       const completed = solutionSteps[currentStepIndex];
       const nextIndex = Math.min(currentStepIndex + 1, solutionSteps.length);
       let stages = learnedStages;
+      // Emit the mastery event only when a stage is newly finished via the drill,
+      // so the camera flies once per stage (and never on a manual chip toggle).
+      let masteredStage = state.masteredStage;
+      let masteredPulse = state.masteredPulse;
       if (completed) {
         const next = solutionSteps[nextIndex];
         const stageFinished = !next || next.stage !== completed.stage;
-        if (stageFinished && !learnedStages.includes(completed.stage)) {
-          stages = [...learnedStages, completed.stage];
+        if (stageFinished) {
+          // Mark the stage mastered (once); fire the camera pulse *every* time a
+          // stage is finished, so re-solving after another scramble replays the
+          // tour rather than going quiet once every stage has been seen.
+          if (!learnedStages.includes(completed.stage)) stages = [...learnedStages, completed.stage];
+          masteredStage = completed.stage;
+          masteredPulse = state.masteredPulse + 1;
         }
       }
-      return { currentStepIndex: nextIndex, learnedStages: stages, actionIndex: 0 };
+      return { currentStepIndex: nextIndex, learnedStages: stages, actionIndex: 0, masteredStage, masteredPulse };
     }),
 
   actionIndex: 0,

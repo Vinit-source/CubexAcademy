@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useStore, STAGES, STAGE_ORDER } from '../store';
-import { Play, CheckCircle2, Shuffle, RotateCcw, Gamepad2, GraduationCap, Trophy, Sparkles, Lightbulb } from 'lucide-react';
+import { Play, CheckCircle2, Shuffle, RotateCcw, Gamepad2, GraduationCap, Trophy, Sparkles, Lightbulb, Settings, Video } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { StageDiagram } from './StageDiagram';
 import { parseMoves, type Move } from '../lib/cube-engine';
@@ -12,16 +12,18 @@ const KEY_TO_FACE: Record<string, string> = {
 };
 const FACE_TO_KEY: Record<string, string> = { U: 'W', D: 'S', R: 'D', L: 'A', F: 'Q', B: 'E' };
 
-// Keyboard legend: physical key → face letter (tinted its cube color) + name.
-// Bright hues are used here for legibility on the dark panel.
-const KEY_HINTS = [
-  { key: 'W', face: 'U', faceClass: 'text-slate-100', name: 'Up' },
-  { key: 'D', face: 'R', faceClass: 'text-red-500', name: 'Right' },
-  { key: 'Q', face: 'F', faceClass: 'text-emerald-400', name: 'Front' },
-  { key: 'S', face: 'D', faceClass: 'text-yellow-400', name: 'Down' },
-  { key: 'A', face: 'L', faceClass: 'text-orange-400', name: 'Left' },
-  { key: 'E', face: 'B', faceClass: 'text-blue-400', name: 'Back' },
-];
+// Physical key → cube face (tinted its cube color) + name. Bright hues are used
+// for legibility on the dark panel. Rendered in the real keyboard layout below.
+const KEY_META: Record<string, { face: string; faceClass: string; name: string }> = {
+  Q: { face: 'F', faceClass: 'text-emerald-400', name: 'Front' },
+  W: { face: 'U', faceClass: 'text-slate-100', name: 'Up' },
+  E: { face: 'B', faceClass: 'text-blue-400', name: 'Back' },
+  A: { face: 'L', faceClass: 'text-orange-400', name: 'Left' },
+  S: { face: 'D', faceClass: 'text-yellow-400', name: 'Down' },
+  D: { face: 'R', faceClass: 'text-red-500', name: 'Right' },
+};
+// Two staggered rows, exactly as they sit on a QWERTY keyboard.
+const KEY_ROWS = [['Q', 'W', 'E'], ['A', 'S', 'D']];
 
 // The physical key(s) to press for an expected move (Tutorial hint). Half turns
 // need two presses; wide/slice moves have no key, so the user taps the bar.
@@ -62,8 +64,13 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
     setCurrentStep,
     actionIndex,
     wrongPulse,
-    isRotating
+    isRotating,
+    cameraAnimationsEnabled,
+    setCameraAnimationsEnabled
   } = useStore();
+
+  // Canvas settings popover (top-right of the 3D panel).
+  const [showSettings, setShowSettings] = useState(false);
 
   const currentStep = solutionSteps[currentStepIndex];
   const currentStage = currentStep ? STAGES[currentStep.stage] : null;
@@ -221,6 +228,44 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
           {children}
         </div>
 
+        {/* Canvas settings — top-right gear opens a popover to toggle the auto
+            camera tour that plays when a stage is mastered. */}
+        <div className="absolute top-4 right-4 z-30">
+          <button
+            onClick={() => setShowSettings((v) => !v)}
+            aria-label="Canvas settings"
+            aria-expanded={showSettings}
+            className={cn('keycap p-2', showSettings ? 'keycap-brand !text-brand-soft' : 'text-muted')}
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+
+          {showSettings && (
+            <>
+              {/* click-away layer */}
+              <div className="fixed inset-0 z-40" onClick={() => setShowSettings(false)} />
+              <div className="absolute right-0 mt-2 w-60 panel p-3 z-50 shadow-xl">
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-muted mb-2 px-1">Settings</h4>
+                <button
+                  onClick={() => setCameraAnimationsEnabled(!cameraAnimationsEnabled)}
+                  role="switch"
+                  aria-checked={cameraAnimationsEnabled}
+                  className="w-full flex items-center gap-3 rounded-xl bg-ink/40 border border-line px-3 py-2.5 text-left hover:border-brand/40 transition-colors"
+                >
+                  <Video className="w-4 h-4 text-brand-soft shrink-0" />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-xs font-bold text-fg">Auto camera tour</span>
+                    <span className="block text-[10px] text-faint leading-tight">Fly around each stage you master</span>
+                  </span>
+                  <span className={cn('relative w-9 h-5 rounded-full transition-colors shrink-0', cameraAnimationsEnabled ? 'bg-brand' : 'bg-surface-2')}>
+                    <span className={cn('absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform', cameraAnimationsEnabled && 'translate-x-4')} />
+                  </span>
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
         {/* Drill progress bars — one per move in the current step. The active
             bar is tappable (guaranteed input for half/wide/slice moves); green =
             done, indigo = current, red = last move was wrong. */}
@@ -361,13 +406,26 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
           </div>
         </div>
 
-        <div className="hidden md:grid grid-cols-3 gap-2.5">
-          {KEY_HINTS.map(({ key, face, faceClass, name }) => (
-            <div key={key} className="flex items-center gap-2">
-              <kbd className="keycap px-2 py-1 rounded-lg font-mono text-xs">{key}</kbd>
-              <span className="text-[10px] font-medium text-muted uppercase">
-                <span className={cn('font-bold', faceClass)}>{face}</span> {name}
-              </span>
+        {/* Keys laid out like the keyboard: Q W E / A S D. Each cap turns its
+            face; the small tinted letter shows which. */}
+        <div className="hidden md:flex flex-col items-center gap-1.5 flex-1 justify-center">
+          {KEY_ROWS.map((row, ri) => (
+            <div key={ri} className={cn('flex gap-1.5', ri === 1 && 'ml-6')}>
+              {row.map((key) => {
+                const { face, faceClass, name } = KEY_META[key];
+                return (
+                  <button
+                    key={key}
+                    onClick={() => onExecuteMove(face)}
+                    disabled={isRotating}
+                    title={`${key} — turn the ${name} face`}
+                    className="keycap w-12 h-12 flex flex-col items-center justify-center leading-none"
+                  >
+                    <span className="font-mono text-sm font-bold">{key}</span>
+                    <span className={cn('text-[9px] font-bold mt-0.5', faceClass)}>{face}</span>
+                  </button>
+                );
+              })}
             </div>
           ))}
         </div>
