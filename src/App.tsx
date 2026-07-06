@@ -12,6 +12,18 @@ import { UI } from './components/UI';
 import { GuideModal } from './components/GuideModal';
 import { useStore, buildSolution } from './store';
 import { CONFIG } from './lib/config';
+import { parseMoves, formatMove, formatMoves, type Move } from './lib/cube-engine';
+
+// A user's keyboard/touch move (single face quarter/prime) "satisfies" the
+// expected drill token when it's the same face turned the right way. Half turns
+// accept either direction; wide/slice tokens can't be keyed (use the chip).
+const FACE_KEYS = 'RLUDFB';
+const drillMatch = (user: Move, expected: Move): boolean => {
+  if (expected.wide || !FACE_KEYS.includes(expected.face)) return false;
+  if (user.face !== expected.face) return false;
+  if (expected.dir === 2) return true;
+  return Math.sign(user.dir) === Math.sign(expected.dir);
+};
 
 type CubeHandle = {
   executeMove: (move: string) => void;
@@ -74,14 +86,57 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, cubeReady]);
 
-  const handleExecuteMove = (move: string) => {
-    cubeRef.current?.executeMove(move);
+  // Perform the current step's expected move, advance the drill, and roll over
+  // to the next step when the step's last move is done. Shared by keyboard/touch
+  // (validated) and the clickable action bar (always the correct move).
+  const performDrillMove = (target: Move, total: number) => {
+    cubeRef.current?.executeMove(formatMove(target));
+    const store = useStore.getState();
+    if (store.actionIndex + 1 >= total) store.advanceStep();
+    else store.advanceAction();
   };
 
-  // Play one computed solution step (solver notation) and advance the path.
-  const handleExecuteSolution = (move: string) => {
-    cubeRef.current?.executeSolution(move);
-    useStore.getState().advanceStep();
+  // A move produced by keyboard/touch. In freeplay it just runs; in Academy it's
+  // graded against the current step's expected move (correct → perform + advance,
+  // wrong → flag for the red flash / cube shake).
+  const handleExecuteMove = (moveStr: string) => {
+    const store = useStore.getState();
+    if (store.mode !== 'learning') {
+      cubeRef.current?.executeMove(moveStr);
+      return;
+    }
+    if (store.isRotating) return;
+    const step = store.solutionSteps[store.currentStepIndex];
+    if (!step) return;
+    const expected = parseMoves(step.human);
+    const target = expected[store.actionIndex];
+    const user = parseMoves(moveStr)[0];
+    if (target && user && drillMatch(user, target)) performDrillMove(target, expected.length);
+    else store.flagWrong();
+  };
+
+  // Clicking the active bar performs the expected move directly — the guaranteed
+  // input for tokens the keyboard can't produce (half/wide/slice turns).
+  const handleDrillAction = () => {
+    const store = useStore.getState();
+    if (store.mode !== 'learning' || store.isRotating) return;
+    const step = store.solutionSteps[store.currentStepIndex];
+    if (!step) return;
+    const expected = parseMoves(step.human);
+    const target = expected[store.actionIndex];
+    if (target) performDrillMove(target, expected.length);
+  };
+
+  // "Play Step" plays the step's remaining moves (from where the drill is) and
+  // advances — the "show me" path, and how OLL/PLL get solved hands-free.
+  const handleExecuteSolution = () => {
+    const store = useStore.getState();
+    if (store.isRotating) return;
+    const step = store.solutionSteps[store.currentStepIndex];
+    if (!step) return;
+    const remaining = parseMoves(step.human).slice(store.actionIndex);
+    if (remaining.length) cubeRef.current?.executeMove(formatMoves(remaining));
+    store.advanceStep();
   };
 
   const handleScramble = () => {
@@ -148,7 +203,7 @@ export default function App() {
       </header>
 
       <main className="flex-1 grid grid-cols-1 md:grid-cols-12 grid-rows-none md:grid-rows-6 gap-4 min-h-0 overflow-y-auto md:overflow-hidden pb-4 md:pb-0">
-        <UI onExecuteMove={handleExecuteMove} onExecuteSolution={handleExecuteSolution} onScramble={handleScramble} onReset={handleReset}>
+        <UI onExecuteMove={handleExecuteMove} onExecuteSolution={handleExecuteSolution} onDrillAction={handleDrillAction} onScramble={handleScramble} onReset={handleReset}>
           <Canvas camera={{ position: [5, 4, 6], fov: 45 }}>
             <ambientLight intensity={0.7} />
             <directionalLight position={[10, 10, 5]} intensity={1.5} castShadow />

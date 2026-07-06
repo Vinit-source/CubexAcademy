@@ -91,12 +91,25 @@ interface AppState {
   learnedStages: Stage[];
   toggleStageLearned: (stage: Stage) => void;
 
+  // Academy modes: Standard (bars only) | Tutorial (also shows keys + vibrates).
+  tutorialMode: boolean;
+  setTutorialMode: (v: boolean) => void;
+
   // Computed solution for the current learning puzzle
   solutionSteps: SolutionStep[];
   currentStepIndex: number;
   setSolution: (steps: SolutionStep[]) => void;
   setCurrentStep: (index: number) => void;
   advanceStep: () => void;
+
+  // Manual-drill progress within the current step: how many of the step's moves
+  // the user has correctly performed. `wrongPulse` increments on a wrong move so
+  // the UI can flash the bar red (and the cube can shake in Tutorial mode).
+  actionIndex: number;
+  advanceAction: () => void;
+  resetAction: () => void;
+  wrongPulse: number;
+  flagWrong: () => void;
 
   // Cube control
   isRotating: boolean;
@@ -131,10 +144,13 @@ export const useStore = create<AppState>((set, get) => ({
         : [...state.learnedStages, stage],
     })),
 
+  tutorialMode: false,
+  setTutorialMode: (v) => set({ tutorialMode: v }),
+
   solutionSteps: [],
   currentStepIndex: 0,
-  setSolution: (steps) => set({ solutionSteps: steps, currentStepIndex: 0 }),
-  setCurrentStep: (index) => set({ currentStepIndex: index }),
+  setSolution: (steps) => set({ solutionSteps: steps, currentStepIndex: 0, actionIndex: 0 }),
+  setCurrentStep: (index) => set({ currentStepIndex: index, actionIndex: 0 }),
   // Advances up to one-past-the-last step; that terminal index is the cube's
   // "solved" state in the UI (no step highlighted). Completing the final step of
   // a stage auto-marks that stage mastered, so "Stages Mastered" reflects real
@@ -152,8 +168,14 @@ export const useStore = create<AppState>((set, get) => ({
           stages = [...learnedStages, completed.stage];
         }
       }
-      return { currentStepIndex: nextIndex, learnedStages: stages };
+      return { currentStepIndex: nextIndex, learnedStages: stages, actionIndex: 0 };
     }),
+
+  actionIndex: 0,
+  advanceAction: () => set((state) => ({ actionIndex: state.actionIndex + 1 })),
+  resetAction: () => set({ actionIndex: 0 }),
+  wrongPulse: 0,
+  flagWrong: () => set((state) => ({ wrongPulse: state.wrongPulse + 1 })),
 
   isRotating: false,
   setIsRotating: (isRotating) => set({ isRotating }),

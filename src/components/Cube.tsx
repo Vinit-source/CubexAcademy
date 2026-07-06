@@ -186,6 +186,15 @@ export const RubiksCube = React.forwardRef(
 
     const setIsRotating = useStore((state) => state.setIsRotating);
 
+    // Cube "vibration" on a wrong Tutorial-mode move: a short decaying shake.
+    const groupRef = useRef<THREE.Group>(null);
+    const shakeStart = useRef<number | null>(null);
+    const wrongPulse = useStore((state) => state.wrongPulse);
+    const tutorialMode = useStore((state) => state.tutorialMode);
+    useEffect(() => {
+      if (wrongPulse > 0 && tutorialMode) shakeStart.current = performance.now();
+    }, [wrongPulse, tutorialMode]);
+
     // Let the parent know the cube has mounted (it lives inside a <Suspense>, so
     // the ref isn't usable until the hand model resolves and this renders).
     useEffect(() => {
@@ -232,6 +241,18 @@ export const RubiksCube = React.forwardRef(
         setHighlightIntensity(base + amplitude * Math.sin(state.clock.elapsedTime * frequency));
       }
 
+      // Decaying horizontal shake after a wrong Tutorial-mode move.
+      if (groupRef.current) {
+        let dx = 0;
+        if (shakeStart.current != null) {
+          const t = (performance.now() - shakeStart.current) / 1000;
+          const DURATION = 0.4;
+          if (t < DURATION) dx = Math.sin(t * 55) * 0.14 * (1 - t / DURATION);
+          else shakeStart.current = null;
+        }
+        groupRef.current.position.x = dx;
+      }
+
       if (!currentMove.current && moveQueue.current.length > 0) {
         currentMove.current = { move: moveQueue.current.shift()!, progress: 0 };
         setIsRotating(true);
@@ -264,7 +285,7 @@ export const RubiksCube = React.forwardRef(
     const active = currentMove.current;
 
     return (
-      <group>
+      <group ref={groupRef}>
         {/* Right / Left robot hands mirror the active R/L turn. */}
         <RobotHand
           side="R"

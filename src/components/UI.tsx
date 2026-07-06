@@ -1,24 +1,37 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useStore, STAGES, STAGE_ORDER } from '../store';
-import { Play, CheckCircle2, Shuffle, RotateCcw, Gamepad2, GraduationCap, Trophy, Sparkles } from 'lucide-react';
+import { Play, CheckCircle2, Shuffle, RotateCcw, Gamepad2, GraduationCap, Trophy, Sparkles, Lightbulb } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { StageDiagram } from './StageDiagram';
+import { parseMoves, type Move } from '../lib/cube-engine';
 
 // Physical key -> cube face. WASD cluster drives Up/Down/Right/Left; Q/E the
 // Front/Back faces. Shift on any of them applies the inverse turn.
 const KEY_TO_FACE: Record<string, string> = {
   W: 'U', S: 'D', D: 'R', A: 'L', Q: 'F', E: 'B',
 };
+const FACE_TO_KEY: Record<string, string> = { U: 'W', D: 'S', R: 'D', L: 'A', F: 'Q', B: 'E' };
+
+// The physical key(s) to press for an expected move (Tutorial hint). Half turns
+// need two presses; wide/slice moves have no key, so the user taps the bar.
+const keyHint = (m: Move): string => {
+  const key = FACE_TO_KEY[m.face];
+  if (m.wide || !key) return 'Tap bar';
+  if (m.dir === 2) return `${key} ×2`;
+  if (m.dir === -1) return `⇧ ${key}`;
+  return key;
+};
 
 interface UIProps {
   onExecuteMove: (move: string) => void;
-  onExecuteSolution: (move: string) => void;
+  onExecuteSolution: () => void;
+  onDrillAction: () => void;
   onScramble: () => void;
   onReset: () => void;
   children: React.ReactNode;
 }
 
-export function UI({ onExecuteMove, onExecuteSolution, onScramble, onReset, children }: UIProps) {
+export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble, onReset, children }: UIProps) {
   const {
     mode,
     setMode,
@@ -31,9 +44,13 @@ export function UI({ onExecuteMove, onExecuteSolution, onScramble, onReset, chil
     updateTimer,
     learnedStages,
     toggleStageLearned,
+    tutorialMode,
+    setTutorialMode,
     solutionSteps,
     currentStepIndex,
     setCurrentStep,
+    actionIndex,
+    wrongPulse,
     isRotating
   } = useStore();
 
@@ -46,6 +63,17 @@ export function UI({ onExecuteMove, onExecuteSolution, onScramble, onReset, chil
   const subStepIndex = currentStep
     ? solutionSteps.slice(0, currentStepIndex).filter((s) => s.stage === currentStep.stage).length
     : 0;
+  // The move tokens of the current step drive the progress bars.
+  const stepMoves: Move[] = currentStep ? parseMoves(currentStep.human) : [];
+
+  // Flash the active bar red briefly when the user makes a wrong move.
+  const [flashWrong, setFlashWrong] = useState(false);
+  useEffect(() => {
+    if (wrongPulse === 0) return;
+    setFlashWrong(true);
+    const t = setTimeout(() => setFlashWrong(false), 400);
+    return () => clearTimeout(t);
+  }, [wrongPulse]);
 
   // Timer loop
   useEffect(() => {
@@ -107,11 +135,23 @@ export function UI({ onExecuteMove, onExecuteSolution, onScramble, onReset, chil
 
         {mode === 'learning' ? (
           <>
-            <div className="flex justify-between items-end mt-2">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Learning Path</h3>
+            <div className="flex justify-between items-center mt-2">
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Learning Path</h3>
+                <button
+                  onClick={() => setTutorialMode(!tutorialMode)}
+                  title="Toggle Tutorial mode (shows the keys to press + vibrates on a wrong move)"
+                  className={cn(
+                    'flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider transition-colors',
+                    tutorialMode ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-800 text-slate-500 hover:text-slate-300'
+                  )}
+                >
+                  <Lightbulb className="w-3 h-3" /> {tutorialMode ? 'Tutorial' : 'Standard'}
+                </button>
+              </div>
               {solutionSteps.length > 0 && (
-                <span className="text-xs font-mono text-indigo-400 font-bold">
-                  Step {Math.min(currentStepIndex + 1, solutionSteps.length)}/{solutionSteps.length}
+                <span className="text-xs font-mono text-indigo-400 font-bold shrink-0">
+                  {Math.min(currentStepIndex + 1, solutionSteps.length)}/{solutionSteps.length}
                 </span>
               )}
             </div>
@@ -169,6 +209,43 @@ export function UI({ onExecuteMove, onExecuteSolution, onScramble, onReset, chil
         <div className="w-full h-full relative z-10">
           {children}
         </div>
+
+        {/* Drill progress bars — one per move in the current step. The active
+            bar is tappable (guaranteed input for half/wide/slice moves); green =
+            done, indigo = current, red = last move was wrong. */}
+        {mode === 'learning' && currentStep && !solveComplete && stepMoves.length > 0 && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 w-[92%] max-w-md flex flex-col items-center gap-2 pointer-events-none">
+            <div className="flex gap-1.5 w-full">
+              {stepMoves.map((_, i) => {
+                const done = i < actionIndex;
+                const current = i === actionIndex;
+                return (
+                  <button
+                    key={i}
+                    disabled={!current || isRotating}
+                    onClick={onDrillAction}
+                    aria-label={current ? 'Perform this move' : undefined}
+                    className={cn(
+                      'h-2.5 flex-1 rounded-full transition-colors',
+                      done && 'bg-emerald-500',
+                      current && (flashWrong ? 'bg-rose-500' : 'bg-indigo-400 animate-pulse pointer-events-auto cursor-pointer'),
+                      !done && !current && 'bg-slate-700/80'
+                    )}
+                  />
+                );
+              })}
+            </div>
+            {tutorialMode && stepMoves[actionIndex] && (
+              <div className="flex items-center gap-2 bg-slate-900/85 backdrop-blur px-3 py-1.5 rounded-full shadow-lg">
+                <span className="text-[9px] text-slate-400 uppercase tracking-widest">Press</span>
+                <kbd className="bg-slate-800 border-b-2 border-slate-950 px-2 py-0.5 rounded font-mono text-xs font-bold text-white">
+                  {keyHint(stepMoves[actionIndex])}
+                </kbd>
+                <span className="text-xs font-mono font-bold text-indigo-300">{currentStep!.human.split(/\s+/)[actionIndex]}</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Current step overlay inside the Canvas area */}
         {mode === 'learning' && (currentStep || solveComplete) && (
@@ -377,7 +454,7 @@ export function UI({ onExecuteMove, onExecuteSolution, onScramble, onReset, chil
                 </button>
 
                 <button
-                  onClick={() => onExecuteSolution(currentStep.moves)}
+                  onClick={() => onExecuteSolution()}
                   disabled={isRotating}
                   className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white p-3 rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg shadow-indigo-500/20 transition-colors disabled:opacity-50 disabled:shadow-none"
                 >
