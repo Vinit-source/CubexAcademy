@@ -42,7 +42,7 @@ Three coordinating pieces:
 
 ## Conventions
 
-- Styling is **Tailwind v4** via `@tailwindcss/vite` (`src/index.css` is just `@import "tailwindcss"`). Use the `cn()` helper in `src/lib/utils.ts` (clsx + tailwind-merge) for conditional classes.
+- Styling is **Tailwind v4** via `@tailwindcss/vite`. `src/index.css` holds the **design system**: an `@theme` token layer ("Tactile Puzzle" — plum base, `brand` violet, the six `face-*` cube colors mirrored from `scene-config.ts`, `font-display`/`font-body`/`font-mono`) plus `@layer components` classes — notably `.panel` (surface tile) and `.keycap` (the signature pressable button). Prefer the semantic token utilities (`bg-surface`, `text-muted`, `bg-brand`, `text-face-green`) and `.panel`/`.keycap`/`.chip` over raw `slate-`/`indigo-` palette classes. Use the `cn()` helper in `src/lib/utils.ts` (clsx + tailwind-merge) for conditional classes. Fonts load from CDN via `@import` with system fallbacks.
 - Icons come from `lucide-react`.
 - Cube move strings use standard Rubik's notation; parsing lives in `cube-engine.ts` (`parseMoves`), not the component.
 - **`rubiks-cube-solver` notation is quirky** (handled by `translateSolverToken`): `prime` suffix instead of `'`; lowercase = wide/double-layer (`bprime`); but middle slices come back UPPERCASE with UPPERCASE `PRIME` (`SPRIME`), and half-slice turns as `MPRIME2`. Match the modifier case-insensitively; a `2` always wins over a stray `prime` (180° is its own inverse). Its default orientation (front=green, up=white, right=red) matches this app's colors.

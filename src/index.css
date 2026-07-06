@@ -1,1 +1,116 @@
+/* Fonts first (CSS requires @import before other rules). Graceful system
+   fallbacks below if the CDN is unavailable. */
+@import url('https://api.fontshare.com/v2/css?f[]=clash-display@600,700&f[]=satoshi@400,500,700,900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
 @import "tailwindcss";
+
+/* ── Design tokens ────────────────────────────────────────────────────────
+   "Tactile Puzzle" theme. The six --face-* hexes mirror src/lib/scene-config.ts
+   so on-screen stage/face coding matches the real 3D cube. Tailwind v4 turns
+   these into utilities automatically (bg-surface, text-muted, font-display …). */
+@theme {
+  --color-ink: #14121b;         /* page background (deep plum) */
+  --color-surface: #1e1a28;     /* panels */
+  --color-surface-2: #2a2438;   /* raised controls / keycaps */
+  --color-line: rgba(255, 255, 255, 0.08);
+  --color-line-strong: rgba(255, 255, 255, 0.16);
+
+  --color-fg: #f4f1f8;          /* primary text */
+  --color-muted: #a79fb5;       /* secondary text */
+  --color-faint: #6e6780;       /* tertiary / hints */
+
+  --color-brand: #8b5cf6;       /* interactive accent (not a cube face color) */
+  --color-brand-soft: #a78bfa;
+  --color-success: #22c55e;
+  --color-danger: #f43f5e;
+
+  --color-face-white: #f1f5f9;
+  --color-face-yellow: #ffd500;
+  --color-face-red: #b90000;
+  --color-face-orange: #ff5900;
+  --color-face-green: #009b48;
+  --color-face-blue: #0045ad;
+
+  --font-display: "Clash Display", "Satoshi", ui-sans-serif, system-ui, sans-serif;
+  --font-body: "Satoshi", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
+}
+
+@layer base {
+  :root { color-scheme: dark; }
+
+  body {
+    background-color: var(--color-ink);
+    color: var(--color-fg);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 { font-family: var(--font-display); }
+
+  ::selection { background: color-mix(in srgb, var(--color-brand) 45%, transparent); }
+
+  /* Visible keyboard focus everywhere. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-soft);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* Respect reduced-motion: no pulsing bars, cube shake, or keycap travel. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* Rounded plastic tile — the base surface for every panel. */
+  .panel {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: 22px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 20px 44px -26px rgba(0, 0, 0, 0.85);
+  }
+
+  /* The signature control: a pressable cube keycap. */
+  .keycap {
+    position: relative;
+    border-radius: 14px;
+    font-weight: 600;
+    color: var(--color-fg);
+    border: 1px solid var(--color-line);
+    border-bottom: 3px solid rgba(0, 0, 0, 0.5);
+    background: linear-gradient(180deg, var(--color-surface-2), color-mix(in srgb, var(--color-surface-2) 80%, black));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    transition: transform 0.06s ease, filter 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  }
+  .keycap:hover:not(:disabled) { filter: brightness(1.14); }
+  .keycap:active:not(:disabled) { transform: translateY(2px); border-bottom-width: 1px; }
+  .keycap:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* Brand-colored keycap for primary actions. */
+  .keycap-brand {
+    color: #fff;
+    border-color: transparent;
+    background: linear-gradient(180deg, var(--color-brand-soft), var(--color-brand));
+    border-bottom-color: color-mix(in srgb, var(--color-brand) 55%, black);
+  }
+
+  /* Small pill/label. */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 999px;
+    border: 1px solid var(--color-line);
+    padding: 0.2rem 0.55rem;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+}

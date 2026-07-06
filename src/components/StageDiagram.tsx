@@ -5,9 +5,10 @@ import type { Stage } from '../store';
 // learners can see the target at a glance. Optional `highlight` rings the cell
 // for the Nth edge (cross) / corner-slot (f2l) — used in the per-step panel.
 
+// White/yellow mirror the cube's real sticker hexes (see scene-config.ts).
 const W = '#f1f5f9'; // solved white sticker
-const Y = '#FFD500'; // solved yellow sticker
-const E = '#1e293b'; // not-yet-solved cell (slate-800)
+const Y = '#ffd500'; // solved yellow sticker
+const E = '#312a41'; // not-yet-solved cell (matches the plum surface)
 
 // 9 cells, row-major (top-left → bottom-right).
 const FACES: Record<Stage, string[]> = {

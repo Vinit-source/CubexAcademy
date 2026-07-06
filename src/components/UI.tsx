@@ -12,6 +12,17 @@ const KEY_TO_FACE: Record<string, string> = {
 };
 const FACE_TO_KEY: Record<string, string> = { U: 'W', D: 'S', R: 'D', L: 'A', F: 'Q', B: 'E' };
 
+// Keyboard legend: physical key → face letter (tinted its cube color) + name.
+// Bright hues are used here for legibility on the dark panel.
+const KEY_HINTS = [
+  { key: 'W', face: 'U', faceClass: 'text-slate-100', name: 'Up' },
+  { key: 'D', face: 'R', faceClass: 'text-red-500', name: 'Right' },
+  { key: 'Q', face: 'F', faceClass: 'text-emerald-400', name: 'Front' },
+  { key: 'S', face: 'D', faceClass: 'text-yellow-400', name: 'Down' },
+  { key: 'A', face: 'L', faceClass: 'text-orange-400', name: 'Left' },
+  { key: 'E', face: 'B', faceClass: 'text-blue-400', name: 'Back' },
+];
+
 // The physical key(s) to press for an expected move (Tutorial hint). Half turns
 // need two presses; wide/slice moves have no key, so the user taps the bar.
 const keyHint = (m: Move): string => {
@@ -111,22 +122,22 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
   return (
     <>
       {/* 1. Learning Path / Mode Switch */}
-      <div className="col-span-1 md:col-span-3 md:row-span-4 bg-slate-900/50 border border-slate-800 rounded-2xl p-5 flex flex-col gap-4 shadow-xl">
-        <div className="flex bg-slate-800 rounded-lg p-1">
-          <button 
+      <div className="col-span-1 md:col-span-3 md:row-span-4 panel p-5 flex flex-col gap-4">
+        <div className="flex bg-ink/60 border border-line rounded-2xl p-1 gap-1">
+          <button
             onClick={() => setMode('learning')}
             className={cn(
-              "flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-colors",
-              mode === 'learning' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+              "flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all",
+              mode === 'learning' ? 'keycap keycap-brand' : 'text-muted hover:text-fg'
             )}
           >
             <GraduationCap size={14} /> Academy
           </button>
-          <button 
+          <button
             onClick={() => setMode('freeplay')}
             className={cn(
-              "flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-xs font-bold uppercase tracking-wider transition-colors",
-              mode === 'freeplay' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-slate-200'
+              "flex-1 flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all",
+              mode === 'freeplay' ? 'keycap keycap-brand' : 'text-muted hover:text-fg'
             )}
           >
             <Gamepad2 size={14} /> Freeplay
@@ -135,30 +146,30 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
 
         {mode === 'learning' ? (
           <>
-            <div className="flex justify-between items-center mt-2">
+            <div className="flex justify-between items-center mt-1">
               <div className="flex items-center gap-2">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Learning Path</h3>
+                <h3 className="text-xs font-bold text-muted uppercase tracking-widest">Learning Path</h3>
                 <button
                   onClick={() => setTutorialMode(!tutorialMode)}
-                  title="Toggle Tutorial mode (shows the keys to press + vibrates on a wrong move)"
+                  title="Tutorial mode shows which key to press and vibrates the cube on a wrong move"
                   className={cn(
-                    'flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider transition-colors',
-                    tutorialMode ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-800 text-slate-500 hover:text-slate-300'
+                    'chip transition-colors',
+                    tutorialMode ? 'bg-amber-400/15 border-amber-400/30 text-amber-300' : 'text-faint hover:text-muted'
                   )}
                 >
                   <Lightbulb className="w-3 h-3" /> {tutorialMode ? 'Tutorial' : 'Standard'}
                 </button>
               </div>
               {solutionSteps.length > 0 && (
-                <span className="text-xs font-mono text-indigo-400 font-bold shrink-0">
+                <span className="text-xs font-mono text-brand-soft font-bold shrink-0">
                   {Math.min(currentStepIndex + 1, solutionSteps.length)}/{solutionSteps.length}
                 </span>
               )}
             </div>
             {solutionSteps.length === 0 ? (
-              <div className="flex-1 flex flex-col justify-center items-center text-center gap-3 text-slate-500">
+              <div className="flex-1 flex flex-col justify-center items-center text-center gap-3 text-faint">
                 <Shuffle className="w-8 h-8" />
-                <p className="text-xs">Hit <span className="font-bold text-indigo-400">Scramble</span> to generate a real, step-by-step solution to walk through.</p>
+                <p className="text-xs">Press <span className="font-bold text-brand-soft">Scramble</span> to generate a real, step-by-step solve to walk through.</p>
               </div>
             ) : (
               <div className="flex flex-col gap-2 flex-1 overflow-y-auto pr-2">
@@ -170,21 +181,21 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
                       key={idx}
                       onClick={() => setCurrentStep(idx)}
                       className={cn(
-                        "p-2.5 rounded-xl flex items-center gap-3 text-left transition-all",
-                        isActive ? "bg-indigo-600/10 border border-indigo-500/30" : "bg-slate-800/40 hover:bg-slate-800/60",
-                        !isActive && !isDone && "opacity-60"
+                        "p-2.5 rounded-2xl flex items-center gap-3 text-left border transition-all",
+                        isActive ? "bg-brand/10 border-brand/40" : "bg-ink/40 border-transparent hover:border-line",
+                        !isActive && !isDone && "opacity-55"
                       )}
                     >
                       <div className={cn(
-                        "w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold shrink-0",
-                        isActive ? "bg-indigo-500 text-white" : "bg-slate-700 text-slate-300",
-                        isDone && !isActive && "bg-emerald-500/20 text-emerald-500"
+                        "w-6 h-6 rounded-lg flex items-center justify-center text-[10px] font-bold shrink-0",
+                        isActive ? "bg-brand text-white" : "bg-surface-2 text-muted",
+                        isDone && !isActive && "bg-success/20 text-success"
                       )}>
                         {isDone ? <CheckCircle2 className="w-4 h-4" /> : (idx + 1).toString().padStart(2, '0')}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className={cn("text-xs font-bold leading-tight truncate", isActive ? "text-white" : "text-slate-300")}>{step.label}</p>
-                        <p className="text-[10px] font-mono text-slate-500 truncate">{step.human}</p>
+                        <p className={cn("text-xs font-bold leading-tight truncate", isActive ? "text-fg" : "text-muted")}>{step.label}</p>
+                        <p className="text-[10px] font-mono text-faint truncate">{step.human}</p>
                       </div>
                     </button>
                   );
@@ -194,17 +205,17 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
           </>
         ) : (
           <div className="flex-1 flex flex-col justify-center items-center text-center gap-4">
-            <Gamepad2 size={48} className="text-slate-700" />
-            <h3 className="text-lg font-bold text-white">Freeplay Mode</h3>
-            <p className="text-xs text-slate-400">Scramble the cube and start solving! The timer will automatically start on your first move.</p>
+            <Gamepad2 size={48} className="text-surface-2" />
+            <h3 className="font-display text-lg font-bold text-fg">Freeplay</h3>
+            <p className="text-xs text-muted">Scramble the cube and solve it your way. The timer starts on your first move.</p>
           </div>
         )}
       </div>
 
       {/* 2. 3D Canvas */}
-      <div className="col-span-1 md:col-span-6 md:row-span-4 bg-slate-900 border-2 border-indigo-500/20 rounded-3xl relative flex items-center justify-center overflow-hidden bg-gradient-to-br from-slate-900 to-indigo-950/30 min-h-[300px]">
+      <div className="col-span-1 md:col-span-6 md:row-span-4 panel !border-2 !border-brand/20 rounded-[26px] relative flex items-center justify-center overflow-hidden bg-gradient-to-br from-surface to-[#191333] min-h-[300px]">
         <div className="absolute inset-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.1) 1px, transparent 0)', backgroundSize: '24px 24px' }}></div>
-        
+
         {/* Canvas goes here */}
         <div className="w-full h-full relative z-10">
           {children}
@@ -227,21 +238,21 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
                     aria-label={current ? 'Perform this move' : undefined}
                     className={cn(
                       'h-2.5 flex-1 rounded-full transition-colors',
-                      done && 'bg-emerald-500',
-                      current && (flashWrong ? 'bg-rose-500' : 'bg-indigo-400 animate-pulse pointer-events-auto cursor-pointer'),
-                      !done && !current && 'bg-slate-700/80'
+                      done && 'bg-success',
+                      current && (flashWrong ? 'bg-danger' : 'bg-brand-soft animate-pulse pointer-events-auto cursor-pointer'),
+                      !done && !current && 'bg-surface-2'
                     )}
                   />
                 );
               })}
             </div>
             {tutorialMode && stepMoves[actionIndex] && (
-              <div className="flex items-center gap-2 bg-slate-900/85 backdrop-blur px-3 py-1.5 rounded-full shadow-lg">
-                <span className="text-[9px] text-slate-400 uppercase tracking-widest">Press</span>
-                <kbd className="bg-slate-800 border-b-2 border-slate-950 px-2 py-0.5 rounded font-mono text-xs font-bold text-white">
+              <div className="flex items-center gap-2 bg-surface/90 border border-line backdrop-blur px-3 py-1.5 rounded-full shadow-lg">
+                <span className="text-[9px] text-muted uppercase tracking-widest">Press</span>
+                <kbd className="keycap px-2 py-0.5 font-mono text-xs font-bold">
                   {keyHint(stepMoves[actionIndex])}
                 </kbd>
-                <span className="text-xs font-mono font-bold text-indigo-300">{currentStep!.human.split(/\s+/)[actionIndex]}</span>
+                <span className="text-xs font-mono font-bold text-brand-soft">{currentStep!.human.split(/\s+/)[actionIndex]}</span>
               </div>
             )}
           </div>
@@ -251,15 +262,15 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
         {mode === 'learning' && (currentStep || solveComplete) && (
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full text-center z-20 pointer-events-none">
             {solveComplete ? (
-              <div className="inline-flex items-center gap-2 bg-emerald-600/90 backdrop-blur px-4 py-2 rounded-full text-xs font-black uppercase tracking-[0.2em] shadow-lg shadow-emerald-500/40">
-                <Sparkles className="w-4 h-4" /> Solved
+              <div className="inline-flex items-center gap-2 bg-success/90 text-white backdrop-blur px-5 py-2 rounded-full text-sm font-black uppercase tracking-[0.2em] shadow-lg shadow-success/40">
+                <Sparkles className="w-4 h-4" /> Solved!
               </div>
             ) : (
               <>
-                <div className="inline-block bg-indigo-600/90 backdrop-blur px-4 py-2 rounded-full text-xs font-black uppercase tracking-[0.2em] shadow-lg shadow-indigo-500/40">
+                <div className="inline-block bg-brand/90 text-white backdrop-blur px-4 py-2 rounded-full text-sm font-mono font-bold tracking-widest shadow-lg shadow-brand/40">
                   {currentStep!.human}
                 </div>
-                <p className="text-[10px] text-slate-400 mt-2 font-medium uppercase drop-shadow-md">{currentStep!.label}</p>
+                <p className="text-[10px] text-muted mt-2 font-bold uppercase tracking-widest drop-shadow-md">{currentStep!.label}</p>
               </>
             )}
           </div>
@@ -267,35 +278,33 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
       </div>
 
       {/* 3. Timer */}
-      <div className="col-span-1 md:col-span-3 md:row-span-3 bg-slate-900/50 border border-slate-800 rounded-2xl p-5 flex flex-col justify-center items-center shadow-xl relative">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2 absolute top-5 left-5">Solve Timer</h3>
-        
+      <div className="col-span-1 md:col-span-3 md:row-span-3 panel p-5 flex flex-col justify-center items-center relative">
+        <h3 className="text-xs font-bold text-muted uppercase tracking-widest mb-2 absolute top-5 left-5">Solve timer</h3>
+
         {bestTime !== null && mode === 'freeplay' && (
-          <div className="absolute top-4 right-4 flex items-center gap-1.5 text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-md">
+          <div className="absolute top-4 right-4 flex items-center gap-1.5 text-success bg-success/10 border border-success/20 px-2 py-1 rounded-lg" title="Best time">
             <Trophy size={12} />
             <span className="text-[10px] font-mono font-bold">{formatTime(bestTime)}</span>
           </div>
         )}
 
-        <div className="text-4xl lg:text-5xl font-mono font-bold text-white tracking-tighter tabular-nums mt-6">
-          {formatTime(timerCurrent).split('.')[0]}<span className="text-indigo-400">.{formatTime(timerCurrent).split('.')[1]}</span>
+        <div className="text-4xl lg:text-5xl font-mono font-bold text-fg tracking-tighter tabular-nums mt-6">
+          {formatTime(timerCurrent).split('.')[0]}<span className="text-brand-soft">.{formatTime(timerCurrent).split('.')[1]}</span>
         </div>
-        
-        <div className="mt-6 grid grid-cols-2 gap-4 w-full">
+
+        <div className="mt-6 grid grid-cols-2 gap-3 w-full">
           <button
             onClick={timerRunning ? stopTimer : startTimer}
             className={cn(
-              "p-2 rounded-lg text-center font-bold text-xs uppercase tracking-wider transition-colors",
-              timerRunning 
-                ? "bg-rose-500/20 text-rose-400 hover:bg-rose-500/30"
-                : "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+              "keycap p-2.5 text-center text-xs uppercase tracking-wider",
+              timerRunning ? "!text-danger" : "!text-success"
             )}
           >
             {timerRunning ? 'Stop' : timerCurrent > 0 ? 'Resume' : 'Start'}
           </button>
           <button
             onClick={resetTimer}
-            className="p-2 rounded-lg text-center font-bold text-xs uppercase tracking-wider bg-slate-800/80 text-slate-400 hover:text-white hover:bg-slate-700 transition-colors"
+            className="keycap p-2.5 text-center text-xs uppercase tracking-wider text-muted"
           >
             Reset
           </button>
@@ -303,10 +312,10 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
       </div>
 
       {/* 4. Progress — per-stage mastery (auto-fills as you complete each stage) */}
-      <div className="col-span-1 md:col-span-3 md:row-span-1 bg-indigo-600 rounded-2xl p-4 flex flex-col justify-center gap-2 shadow-lg shadow-indigo-600/20">
+      <div className="col-span-1 md:col-span-3 md:row-span-1 panel p-4 flex flex-col justify-center gap-2.5">
         <div className="flex items-center justify-between">
-          <span className="text-[10px] font-black uppercase tracking-widest opacity-80 text-white">Stages Mastered</span>
-          <span className="text-sm font-black text-white tabular-nums">{learnedStages.length}/{STAGE_ORDER.length}</span>
+          <span className="text-[10px] font-black uppercase tracking-widest text-muted">Stages mastered</span>
+          <span className="text-sm font-black text-fg tabular-nums">{learnedStages.length}/{STAGE_ORDER.length}</span>
         </div>
         <div className="flex gap-1.5">
           {STAGE_ORDER.map((s) => {
@@ -317,9 +326,9 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
                 key={s}
                 title={STAGES[s].name}
                 className={cn(
-                  "flex-1 flex items-center justify-center gap-1 rounded-md py-1 text-[9px] font-black uppercase tracking-wider transition-colors",
-                  done ? "bg-white text-indigo-700" : "bg-white/10 text-white/70",
-                  active && !done && "ring-2 ring-white/70"
+                  "flex-1 flex items-center justify-center gap-1 rounded-lg py-1.5 text-[9px] font-black uppercase tracking-wider transition-all",
+                  done ? "bg-brand text-white shadow-sm shadow-brand/30" : "bg-surface-2 text-faint",
+                  active && !done && "ring-2 ring-brand-soft/70 text-brand-soft"
                 )}
               >
                 {done && <CheckCircle2 className="w-3 h-3" />}
@@ -331,73 +340,49 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
       </div>
 
       {/* 5. Keyboard Mapping & Touch Controls */}
-      <div className="col-span-1 md:col-span-4 md:row-span-2 bg-slate-900/50 border border-slate-800 rounded-2xl p-5 flex flex-col shadow-xl">
+      <div className="col-span-1 md:col-span-4 md:row-span-2 panel p-5 flex flex-col">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Controls</h3>
-          <div className="flex gap-2">
+          <h3 className="text-xs font-bold text-muted uppercase tracking-widest">Controls</h3>
+          <div className="flex gap-3">
             <button
               onClick={onReset}
               disabled={isRotating}
-              className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400 hover:text-slate-200 disabled:opacity-50"
+              className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-muted hover:text-fg disabled:opacity-40 transition-colors"
             >
               <RotateCcw className="w-3 h-3" /> Reset
             </button>
             <button
               onClick={onScramble}
               disabled={isRotating}
-              className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-indigo-400 hover:text-indigo-300 disabled:opacity-50"
+              className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-brand-soft hover:text-brand disabled:opacity-40 transition-colors"
             >
               <Shuffle className="w-3 h-3" /> Scramble
             </button>
           </div>
         </div>
-        
-        <div className="hidden md:grid grid-cols-3 gap-2">
-          <div className="flex items-center gap-2">
-            <kbd className="bg-slate-800 border-b-4 border-slate-950 px-2 py-1 rounded-md font-mono text-xs font-bold">W</kbd>
-            <span className="text-[10px] font-medium text-slate-300 uppercase"><span className="font-bold">[U]</span> Up</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <kbd className="bg-slate-800 border-b-4 border-slate-950 px-2 py-1 rounded-md font-mono text-xs font-bold">D</kbd>
-            <span className="text-[10px] font-medium text-slate-300 uppercase"><span className="font-bold">[R]</span> Right</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <kbd className="bg-slate-800 border-b-4 border-slate-950 px-2 py-1 rounded-md font-mono text-xs font-bold">Q</kbd>
-            <span className="text-[10px] font-medium text-slate-300 uppercase"><span className="font-bold">[F]</span> Front</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <kbd className="bg-slate-800 border-b-4 border-slate-950 px-2 py-1 rounded-md font-mono text-xs font-bold">S</kbd>
-            <span className="text-[10px] font-medium text-slate-300 uppercase"><span className="font-bold">[D]</span> Down</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <kbd className="bg-slate-800 border-b-4 border-slate-950 px-2 py-1 rounded-md font-mono text-xs font-bold">A</kbd>
-            <span className="text-[10px] font-medium text-slate-300 uppercase"><span className="font-bold">[L]</span> Left</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <kbd className="bg-slate-800 border-b-4 border-slate-950 px-2 py-1 rounded-md font-mono text-xs font-bold">E</kbd>
-            <span className="text-[10px] font-medium text-slate-300 uppercase"><span className="font-bold">[B]</span> Back</span>
-          </div>
+
+        <div className="hidden md:grid grid-cols-3 gap-2.5">
+          {KEY_HINTS.map(({ key, face, faceClass, name }) => (
+            <div key={key} className="flex items-center gap-2">
+              <kbd className="keycap px-2 py-1 rounded-lg font-mono text-xs">{key}</kbd>
+              <span className="text-[10px] font-medium text-muted uppercase">
+                <span className={cn('font-bold', faceClass)}>{face}</span> {name}
+              </span>
+            </div>
+          ))}
         </div>
-        <div className="hidden md:block mt-auto text-[9px] text-slate-500 font-medium uppercase tracking-widest text-center">
-          Hold Shift for inverse rotation (')
+        <div className="hidden md:block mt-auto pt-3 text-[9px] text-faint font-medium uppercase tracking-widest text-center">
+          Hold Shift for the reverse turn (')
         </div>
 
         {/* Mobile Touch Controls */}
         <div className="md:hidden grid grid-cols-4 gap-2 touch-manipulation flex-1">
           {['R', 'L', 'U', 'D', 'F', 'B'].map((move) => (
             <React.Fragment key={move}>
-              <button
-                disabled={isRotating}
-                onClick={() => onExecuteMove(move)}
-                className="bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border-b-4 border-slate-950 text-white font-bold rounded-lg text-sm transition-colors disabled:opacity-50"
-              >
+              <button disabled={isRotating} onClick={() => onExecuteMove(move)} className="keycap text-sm py-2">
                 {move}
               </button>
-              <button
-                disabled={isRotating}
-                onClick={() => onExecuteMove(`${move}'`)}
-                className="bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border-b-4 border-slate-950 text-white font-bold rounded-lg text-sm transition-colors disabled:opacity-50"
-              >
+              <button disabled={isRotating} onClick={() => onExecuteMove(`${move}'`)} className="keycap text-sm py-2">
                 {move}'
               </button>
             </React.Fragment>
@@ -406,67 +391,65 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
       </div>
 
       {/* 6. Execution & Action */}
-      <div className="col-span-1 md:col-span-8 md:row-span-2 bg-slate-900/50 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between shadow-xl">
+      <div className="col-span-1 md:col-span-8 md:row-span-2 panel p-5 flex flex-col justify-between">
         {mode === 'learning' ? (
           solveComplete ? (
             <div className="flex-1 flex flex-col justify-center items-center text-center gap-3">
-              <Sparkles className="w-10 h-10 text-emerald-400" />
-              <h3 className="text-lg font-bold text-white">Cube Solved!</h3>
-              <p className="text-xs text-slate-400">Scramble again for a fresh solve, or hit Reset to retry this one.</p>
+              <Sparkles className="w-10 h-10 text-success" />
+              <h3 className="font-display text-lg font-bold text-fg">Cube solved!</h3>
+              <p className="text-xs text-muted">Scramble for a fresh solve, or reset to retry this one.</p>
             </div>
           ) : !currentStep || !currentStage ? (
             <div className="flex-1 flex flex-col justify-center items-center text-center gap-3">
-              <GraduationCap className="w-10 h-10 text-slate-600" />
-              <p className="text-sm text-slate-400">Scramble the cube to generate a guided, step-by-step CFOP solve.</p>
+              <GraduationCap className="w-10 h-10 text-surface-2" />
+              <p className="text-sm text-muted">Scramble the cube to generate a guided, step-by-step solve.</p>
             </div>
           ) : (
             <>
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">{currentStage.name} · {currentStep.label}</h3>
+                <h3 className="text-xs font-bold text-muted uppercase tracking-widest">{currentStage.name} · {currentStep.label}</h3>
                 {stageLearned && (
-                  <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                  <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-success">
                     <CheckCircle2 className="w-3 h-3" /> Mastered
                   </span>
                 )}
               </div>
 
               <div className="flex items-start gap-3 mb-3">
-                <p className="text-sm text-slate-300 flex-1">{currentStage.description}</p>
+                <p className="text-sm text-muted flex-1">{currentStage.description}</p>
                 <StageDiagram stage={currentStep.stage} highlight={subStepIndex} className="mt-0.5" />
               </div>
 
-              <div className="mb-4 flex items-start gap-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 px-3 py-2">
-                <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mt-0.5 shrink-0">Goal</span>
-                <p className="text-xs text-slate-300 leading-relaxed">{currentStage.goal}</p>
+              <div className="mb-4 flex items-start gap-2 rounded-xl bg-brand/10 border border-brand/20 px-3 py-2">
+                <span className="text-[10px] font-black uppercase tracking-widest text-brand-soft mt-0.5 shrink-0">Goal</span>
+                <p className="text-xs text-muted leading-relaxed">{currentStage.goal}</p>
               </div>
 
-              <div className="flex gap-4 mt-auto">
+              <div className="flex gap-3 mt-auto">
                 <button
                   onClick={() => toggleStageLearned(currentStep.stage)}
                   className={cn(
-                    "flex-1 p-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors border flex items-center justify-center gap-2",
-                    stageLearned
-                      ? "bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-slate-300"
-                      : "bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
+                    "keycap flex-1 p-3 text-xs uppercase tracking-wider flex items-center justify-center gap-2",
+                    stageLearned ? "text-muted" : "!text-success"
                   )}
                 >
-                  {stageLearned ? 'Mark Unmastered' : 'Mark Mastered'}
+                  {stageLearned ? 'Mark as unlearned' : 'Mark as learned'}
                 </button>
 
                 <button
                   onClick={() => onExecuteSolution()}
                   disabled={isRotating}
-                  className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white p-3 rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg shadow-indigo-500/20 transition-colors disabled:opacity-50 disabled:shadow-none"
+                  className="keycap keycap-brand flex-1 flex items-center justify-center gap-2 p-3 text-xs uppercase tracking-wider"
                 >
                   <Play className="w-4 h-4" fill="currentColor" />
-                  Play Step
+                  Play step
                 </button>
               </div>
             </>
           )
         ) : (
           <div className="flex-1 flex flex-col justify-center items-center">
-             <p className="text-sm text-slate-400 font-medium">Use the keyboard or on-screen controls to solve the cube!</p>
+            <p className="text-sm text-muted font-medium">Use the keyboard or the on-screen keys to solve the cube.</p>
           </div>
         )}
       </div>

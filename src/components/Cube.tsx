@@ -142,12 +142,12 @@ function RotationArrow({ move }: { move: Move }) {
 // SCENE.label. Depth-testing lets the cube occlude far-side labels.
 const D = SCENE.label.distance;
 const FACE_LABELS: { name: string; color: string; pos: [number, number, number] }[] = [
-  { name: 'Right', color: COLORS.R, pos: [D, 0, 0] },
-  { name: 'Left', color: COLORS.L, pos: [-D, 0, 0] },
-  { name: 'Up', color: COLORS.U, pos: [0, D, 0] },
-  { name: 'Down', color: COLORS.D, pos: [0, -D, 0] },
-  { name: 'Front', color: COLORS.F, pos: [0, 0, D] },
-  { name: 'Back', color: COLORS.B, pos: [0, 0, -D] },
+  { name: 'R', color: COLORS.R, pos: [D, 0, 0] },
+  { name: 'L', color: COLORS.L, pos: [-D, 0, 0] },
+  { name: 'U', color: COLORS.U, pos: [0, D, 0] },
+  { name: 'D', color: COLORS.D, pos: [0, -D, 0] },
+  { name: 'F', color: COLORS.F, pos: [0, 0, D] },
+  { name: 'B', color: COLORS.B, pos: [0, 0, -D] },
 ];
 
 function FaceLabels() {

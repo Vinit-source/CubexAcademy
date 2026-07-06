@@ -183,22 +183,28 @@ export default function App() {
   };
 
   return (
-    <div className="bg-slate-950 text-slate-100 h-screen w-full p-4 md:p-6 flex flex-col gap-4 md:gap-6 font-sans overflow-hidden">
+    <div className="bg-ink text-fg h-screen w-full p-4 md:p-6 flex flex-col gap-4 md:gap-6 overflow-hidden">
       <GuideModal open={showGuide} onClose={() => setShowGuide(false)} />
-      <header className="flex justify-between items-center px-2 shrink-0">
+      <header className="flex justify-between items-center px-1 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center font-bold text-xl shadow-lg shadow-indigo-500/20">C</div>
+          {/* Logo: a little cube built from four sticker colors. */}
+          <div className="grid grid-cols-2 gap-[3px] p-[5px] rounded-[14px] bg-surface-2 border border-line shadow-lg">
+            <span className="w-3.5 h-3.5 rounded-[3px] bg-face-white" />
+            <span className="w-3.5 h-3.5 rounded-[3px] bg-face-red" />
+            <span className="w-3.5 h-3.5 rounded-[3px] bg-face-green" />
+            <span className="w-3.5 h-3.5 rounded-[3px] bg-face-yellow" />
+          </div>
           <div>
-            <h1 className="text-2xl font-black tracking-tight leading-none uppercase italic">CubeX <span className="text-indigo-400">Academy</span></h1>
-            <p className="text-xs text-slate-400 font-medium tracking-widest uppercase hidden sm:block">Interactive 3D Solving Platform</p>
+            <h1 className="font-display text-2xl font-bold tracking-tight leading-none">CubeX <span className="text-brand-soft">Academy</span></h1>
+            <p className="text-xs text-muted font-medium tracking-widest uppercase hidden sm:block">Learn to solve, one turn at a time</p>
           </div>
         </div>
         <button
           onClick={() => setShowGuide(true)}
-          className="flex items-center gap-2 bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-200 px-3 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors"
+          className="keycap flex items-center gap-2 px-3.5 py-2 text-xs font-bold uppercase tracking-wider"
         >
-          <BookOpen className="w-4 h-4" />
-          <span className="hidden sm:inline">Instructions</span>
+          <BookOpen className="w-4 h-4 text-brand-soft" />
+          <span className="hidden sm:inline">How to solve</span>
         </button>
       </header>
 
@@ -235,12 +241,12 @@ export default function App() {
       </main>
 
       <footer className="text-center py-2 hidden md:block shrink-0">
-        <p className="text-[10px] text-slate-600 font-medium tracking-widest uppercase">Interaction Hint: Use mouse to orbit • Keyboard letters for face rotation</p>
-        <p className="text-[9px] text-slate-700 font-medium tracking-wider mt-1">
+        <p className="text-[10px] text-faint font-medium tracking-widest uppercase">Drag to orbit • Keyboard letters turn faces</p>
+        <p className="text-[9px] text-faint/70 font-medium tracking-wider mt-1">
           Hand model “Low Poly Right Hand” by Raziq Brown, licensed{' '}
-          <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noreferrer" className="underline hover:text-slate-500">CC-BY 3.0</a>
+          <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noreferrer" className="underline hover:text-muted">CC-BY 3.0</a>
           {', via '}
-          <a href="https://poly.pizza/m/cl8ax5B13cp" target="_blank" rel="noreferrer" className="underline hover:text-slate-500">Poly Pizza</a>
+          <a href="https://poly.pizza/m/cl8ax5B13cp" target="_blank" rel="noreferrer" className="underline hover:text-muted">Poly Pizza</a>
         </p>
       </footer>
     </div>
