@@ -1,0 +1,6 @@
+{
+  "name": "Cubify",
+  "description": "An interactive 3D Rubik's cube application to learn solving algorithms.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
