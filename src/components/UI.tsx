@@ -230,27 +230,27 @@ export function UI({ onExecuteMove, onScramble, onReset, children }: UIProps) {
         <div className="hidden md:grid grid-cols-3 gap-2">
           <div className="flex items-center gap-2">
             <kbd className="bg-slate-800 border-b-4 border-slate-950 px-2 py-1 rounded-md font-mono text-xs font-bold">W</kbd>
-            <span className="text-[10px] font-medium text-slate-300 uppercase">Up</span>
+            <span className="text-[10px] font-medium text-slate-300 uppercase"><span className="font-bold">[U]</span> Up</span>
           </div>
           <div className="flex items-center gap-2">
             <kbd className="bg-slate-800 border-b-4 border-slate-950 px-2 py-1 rounded-md font-mono text-xs font-bold">D</kbd>
-            <span className="text-[10px] font-medium text-slate-300 uppercase">Right</span>
+            <span className="text-[10px] font-medium text-slate-300 uppercase"><span className="font-bold">[R]</span> Right</span>
           </div>
           <div className="flex items-center gap-2">
             <kbd className="bg-slate-800 border-b-4 border-slate-950 px-2 py-1 rounded-md font-mono text-xs font-bold">Q</kbd>
-            <span className="text-[10px] font-medium text-slate-300 uppercase">Front</span>
+            <span className="text-[10px] font-medium text-slate-300 uppercase"><span className="font-bold">[F]</span> Front</span>
           </div>
           <div className="flex items-center gap-2">
             <kbd className="bg-slate-800 border-b-4 border-slate-950 px-2 py-1 rounded-md font-mono text-xs font-bold">S</kbd>
-            <span className="text-[10px] font-medium text-slate-300 uppercase">Down</span>
+            <span className="text-[10px] font-medium text-slate-300 uppercase"><span className="font-bold">[D]</span> Down</span>
           </div>
           <div className="flex items-center gap-2">
             <kbd className="bg-slate-800 border-b-4 border-slate-950 px-2 py-1 rounded-md font-mono text-xs font-bold">A</kbd>
-            <span className="text-[10px] font-medium text-slate-300 uppercase">Left</span>
+            <span className="text-[10px] font-medium text-slate-300 uppercase"><span className="font-bold">[L]</span> Left</span>
           </div>
           <div className="flex items-center gap-2">
             <kbd className="bg-slate-800 border-b-4 border-slate-950 px-2 py-1 rounded-md font-mono text-xs font-bold">E</kbd>
-            <span className="text-[10px] font-medium text-slate-300 uppercase">Back</span>
+            <span className="text-[10px] font-medium text-slate-300 uppercase"><span className="font-bold">[B]</span> Back</span>
           </div>
         </div>
         <div className="hidden md:block mt-auto text-[9px] text-slate-500 font-medium uppercase tracking-widest text-center">
