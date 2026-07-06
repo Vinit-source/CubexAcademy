@@ -1,0 +1,120 @@
+import { X, BookOpen } from 'lucide-react';
+import { cn } from '../lib/utils';
+
+interface GuideModalProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+// The four CFOP (Fridrich) stages this app teaches. Content follows the standard
+// reference at https://ruwix.com/the-rubiks-cube/advanced-cfop-fridrich/.
+const STEPS: { tag: string; title: string; color: string; body: string }[] = [
+  {
+    tag: '1',
+    title: 'Cross',
+    color: 'text-emerald-400',
+    body: 'Build a plus-shaped cross of four edges on one face (usually white), each edge also matching the color of its neighbouring center. Solve it on the bottom so it stays out of your way. This step is fully intuitive — no algorithms.',
+  },
+  {
+    tag: '2',
+    title: 'F2L — First Two Layers',
+    color: 'text-sky-400',
+    body: 'Solve the four bottom corners together with their matching middle-layer edges, one corner+edge "pair" at a time, inserting each into its slot. Completing all four finishes the entire bottom two layers at once.',
+  },
+  {
+    tag: '3',
+    title: 'OLL — Orient Last Layer',
+    color: 'text-amber-400',
+    body: 'Make the whole top face a single solid color, ignoring the side colors for now. This is orientation only — the pieces are turned the right way up but not yet in their final spots.',
+  },
+  {
+    tag: '4',
+    title: 'PLL — Permute Last Layer',
+    color: 'text-rose-400',
+    body: 'Move the already-oriented last-layer pieces into their correct positions. When this finishes, every side matches its center and the cube is solved.',
+  },
+];
+
+const TIPS = [
+  'Notation: F R U D L B turn the Front/Right/Up/Down/Left/Back face clockwise. Add ’ for counter-clockwise (e.g. R’) and 2 for a 180° turn (e.g. U2). Lowercase = a wide, two-layer turn.',
+  'Hold the cube with the cross on the bottom throughout, so you can watch the last layer.',
+  'Beginners: use "2-look" OLL and PLL (about 16 short algorithms) before learning full CFOP’s 78.',
+  'Look ahead — while finishing one pair, spot where the next one is going.',
+];
+
+export function GuideModal({ open, onClose }: GuideModalProps) {
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl p-6 md:p-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          aria-label="Close guide"
+          className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        <div className="flex items-center gap-3 mb-2">
+          <div className="w-10 h-10 rounded-lg bg-indigo-600 flex items-center justify-center shrink-0">
+            <BookOpen className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-xl font-black text-white uppercase tracking-tight">How to Solve a Rubik&rsquo;s Cube</h2>
+            <p className="text-xs text-slate-400 font-medium uppercase tracking-widest">The CFOP / Fridrich method</p>
+          </div>
+        </div>
+
+        <p className="text-sm text-slate-300 mb-6 leading-relaxed">
+          Every solve follows the same four stages, in order. Learn them once and you can solve any
+          scramble — the Academy walks you through each stage on a real solution.
+        </p>
+
+        <div className="flex flex-col gap-3 mb-6">
+          {STEPS.map((s) => (
+            <div key={s.tag} className="flex gap-4 rounded-xl bg-slate-800/50 border border-slate-700/60 p-4">
+              <div className="w-8 h-8 shrink-0 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center font-black text-sm text-white">
+                {s.tag}
+              </div>
+              <div>
+                <h3 className={cn('text-sm font-bold uppercase tracking-wide mb-1', s.color)}>{s.title}</h3>
+                <p className="text-xs text-slate-300 leading-relaxed">{s.body}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-xl bg-indigo-500/10 border border-indigo-500/20 p-4">
+          <h3 className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mb-2">Good to remember</h3>
+          <ul className="flex flex-col gap-2">
+            {TIPS.map((t, i) => (
+              <li key={i} className="text-xs text-slate-300 leading-relaxed flex gap-2">
+                <span className="text-indigo-400 font-bold shrink-0">&bull;</span>
+                <span>{t}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <p className="text-[10px] text-slate-500 mt-4 text-center">
+          Reference:{' '}
+          <a
+            href="https://ruwix.com/the-rubiks-cube/advanced-cfop-fridrich/"
+            target="_blank"
+            rel="noreferrer"
+            className="underline hover:text-slate-300"
+          >
+            ruwix.com — Advanced CFOP (Fridrich) Method
+          </a>
+        </p>
+      </div>
+    </div>
+  );
+}

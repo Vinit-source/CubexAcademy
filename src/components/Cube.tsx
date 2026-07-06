@@ -1,23 +1,34 @@
 import React, { useRef, useMemo, useState, useEffect } from 'react';
-import { useFrame, extend } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
+import { Text, Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 import { useStore } from '../store';
+import { CONFIG } from '../lib/config';
+import { SCENE } from '../lib/scene-config';
 import { RobotHand } from './Hands';
+import {
+  initPieces,
+  applyMove,
+  isOnMove,
+  resolveMove,
+  progressAngle,
+  parseMoves,
+  translateSolverSequence,
+  getFacelets,
+  isSolved,
+  type Piece,
+  type Move,
+  type FaceLetter,
+  type Sticker,
+} from '../lib/cube-engine';
 
-// Define materials for the 6 faces: Right, Left, Top, Bottom, Front, Back
-const COLORS = {
-  R: '#B90000', // Right - Red
-  L: '#FF5900', // Left - Orange
-  U: '#FFFFFF', // Top - White
-  D: '#FFD500', // Bottom - Yellow
-  F: '#009B48', // Front - Green
-  B: '#0045AD', // Back - Blue
-  CORE: '#111111', // Black for inner faces
-};
+// Sticker colors live in scene-config (match the solver's default orientation).
+const COLORS: Record<FaceLetter | 'CORE', string> = SCENE.colors;
 
-const createMaterial = (color: string) => new THREE.MeshStandardMaterial({ color, roughness: 0.1, metalness: 0.1 });
+const createMaterial = (color: string) =>
+  new THREE.MeshStandardMaterial({ color, roughness: 0.1, metalness: 0.1 });
 
-const CUBE_MATERIALS = {
+const CUBE_MATERIALS: Record<FaceLetter | 'CORE', THREE.MeshStandardMaterial> = {
   R: createMaterial(COLORS.R),
   L: createMaterial(COLORS.L),
   U: createMaterial(COLORS.U),
@@ -27,292 +38,275 @@ const CUBE_MATERIALS = {
   CORE: createMaterial(COLORS.CORE),
 };
 
-type PieceState = {
-  id: number;
-  position: THREE.Vector3;
-  quaternion: THREE.Quaternion;
-  materials: THREE.Material[];
+// Highlight variants: same colors, but with an emissive glow whose intensity is
+// pulsed each frame (see useFrame) to make the actively-turning layer blink.
+// These are only ever applied to on-move pieces, so pulsing them globally is
+// safe — no other piece renders with them.
+const createHighlightMaterial = (color: string) =>
+  new THREE.MeshStandardMaterial({ color, roughness: 0.1, metalness: 0.1, emissive: new THREE.Color(color) });
+
+const HIGHLIGHT_MATERIALS: Record<FaceLetter | 'CORE', THREE.MeshStandardMaterial> = {
+  R: createHighlightMaterial(COLORS.R),
+  L: createHighlightMaterial(COLORS.L),
+  U: createHighlightMaterial(COLORS.U),
+  D: createHighlightMaterial(COLORS.D),
+  F: createHighlightMaterial(COLORS.F),
+  B: createHighlightMaterial(COLORS.B),
+  CORE: createHighlightMaterial('#ffffff'),
 };
 
-const initCube = (): PieceState[] => {
-  const pieces: PieceState[] = [];
-  let id = 0;
-  for (let x = -1; x <= 1; x++) {
-    for (let y = -1; y <= 1; y++) {
-      for (let z = -1; z <= 1; z++) {
-        // [Right, Left, Top, Bottom, Front, Back]
-        const materials = [
-          x === 1 ? CUBE_MATERIALS.R : CUBE_MATERIALS.CORE,
-          x === -1 ? CUBE_MATERIALS.L : CUBE_MATERIALS.CORE,
-          y === 1 ? CUBE_MATERIALS.U : CUBE_MATERIALS.CORE,
-          y === -1 ? CUBE_MATERIALS.D : CUBE_MATERIALS.CORE,
-          z === 1 ? CUBE_MATERIALS.F : CUBE_MATERIALS.CORE,
-          z === -1 ? CUBE_MATERIALS.B : CUBE_MATERIALS.CORE,
-        ];
+const setHighlightIntensity = (v: number) => {
+  Object.values(HIGHLIGHT_MATERIALS).forEach((m) => (m.emissiveIntensity = v));
+};
 
-        pieces.push({
-          id: id++,
-          position: new THREE.Vector3(x, y, z),
-          quaternion: new THREE.Quaternion(),
-          materials,
-        });
-      }
+// A piece's rendered face materials, in the geometry's face order
+// [R, L, U, D, F, B] — the same order as `Piece.colors`. `highlight` swaps in
+// the glowing variants for the actively-turning layer.
+const materialsFor = (colors: Sticker[], highlight: boolean): THREE.Material[] => {
+  const set = highlight ? HIGHLIGHT_MATERIALS : CUBE_MATERIALS;
+  return colors.map((c) => (c === null ? set.CORE : set[c]));
+};
+
+// Outward normal of the face a move visually sits on (for placing the arrow).
+const FACE_NORMAL: Record<string, THREE.Vector3> = {
+  R: new THREE.Vector3(1, 0, 0), L: new THREE.Vector3(-1, 0, 0),
+  U: new THREE.Vector3(0, 1, 0), D: new THREE.Vector3(0, -1, 0),
+  F: new THREE.Vector3(0, 0, 1), B: new THREE.Vector3(0, 0, -1),
+  M: new THREE.Vector3(1, 0, 0), E: new THREE.Vector3(0, -1, 0), S: new THREE.Vector3(0, 0, 1),
+};
+
+/**
+ * A curved "rotate this face" glyph that hovers just off the active face and
+ * spins in the turn's direction, so it's always clear which side is moving and
+ * which way. Rendered only while a move animates.
+ */
+function RotationArrow({ move }: { move: Move }) {
+  const { axisVec, sign } = resolveMove(move);
+  const normal = FACE_NORMAL[move.face] ?? new THREE.Vector3(1, 0, 0);
+
+  // Orient a local frame whose +Z points along the face normal (the ring lies
+  // in the face plane), then sweep an arc; the turn direction is sign * dir.
+  const { position, quaternion, points, headPos, headQuat } = useMemo(() => {
+    const zAxis = normal.clone().normalize();
+    const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), zAxis);
+
+    const radius = SCENE.arrow.radius;
+    const turnSign = Math.sign(sign * (move.dir === 2 ? 1 : move.dir)) || 1;
+    // Looking at the face from outside (down -normal), a clockwise turn should
+    // read clockwise. Sweep ~270° of arc, leaving a gap for the head.
+    const start = SCENE.arrow.arcStart;
+    const sweep = SCENE.arrow.arcSweep;
+    const segs = 32;
+    const pts: THREE.Vector3[] = [];
+    for (let i = 0; i <= segs; i++) {
+      const t = start + (sweep * i) / segs * turnSign;
+      pts.push(new THREE.Vector3(Math.cos(t) * radius, Math.sin(t) * radius, 0));
     }
-  }
-  return pieces;
-};
+    const tEnd = start + sweep * turnSign;
+    const head = new THREE.Vector3(Math.cos(tEnd) * radius, Math.sin(tEnd) * radius, 0);
+    // Cone points along the tangent at the arc end.
+    const tangent = new THREE.Vector3(-Math.sin(tEnd), Math.cos(tEnd), 0).multiplyScalar(turnSign);
+    const hQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent.normalize());
 
-// Queue for moves
-type Move = {
-  face: string;
-  dir: number; // 1 for clockwise, -1 for counter-clockwise, 2 for 180
-};
+    return {
+      position: zAxis.clone().multiplyScalar(SCENE.arrow.faceOffset),
+      quaternion: quat,
+      points: pts,
+      headPos: head,
+      headQuat: hQuat,
+    };
+  }, [normal, sign, move.dir, axisVec]);
 
-export const RubiksCube = React.forwardRef((props: { onMoveStart?: () => void, onMoveEnd?: (isSolved: boolean) => void, onReady?: () => void }, ref) => {
-  const pieces = useRef<PieceState[]>(initCube());
-  const [, setRender] = useState(0); // Trigger re-render
-  
-  const moveQueue = useRef<Move[]>([]);
-  const currentMove = useRef<{ move: Move; progress: number } | null>(null);
-  const ROTATION_SPEED = Math.PI * 3; // Radians per second
+  const tubeGeom = useMemo(
+    () => new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points), 40, SCENE.arrow.tubeRadius, 8, false),
+    [points]
+  );
 
-  const setIsRotating = useStore((state) => state.setIsRotating);
+  const { color, emissiveIntensity, coneRadius, coneHeight } = SCENE.arrow;
+  return (
+    <group position={position} quaternion={quaternion}>
+      <mesh geometry={tubeGeom}>
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={emissiveIntensity} toneMapped={false} />
+      </mesh>
+      <mesh position={headPos} quaternion={headQuat}>
+        <coneGeometry args={[coneRadius, coneHeight, 12]} />
+        <meshStandardMaterial color={color} emissive={color} emissiveIntensity={emissiveIntensity} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
 
-  const checkSolved = () => {
-    const originalNormals = [
-      new THREE.Vector3(1, 0, 0), // 0: R
-      new THREE.Vector3(-1, 0, 0),// 1: L
-      new THREE.Vector3(0, 1, 0), // 2: U
-      new THREE.Vector3(0, -1, 0),// 3: D
-      new THREE.Vector3(0, 0, 1), // 4: F
-      new THREE.Vector3(0, 0, -1),// 5: B
-    ];
-    
-    for (const p of pieces.current) {
-      for (let i = 0; i < 6; i++) {
-        const mat = p.materials[i];
-        if (mat === CUBE_MATERIALS.CORE) continue;
-        
-        const currentNormal = originalNormals[i].clone().applyQuaternion(p.quaternion).round();
-        const dirIdx = originalNormals.findIndex(n => n.equals(currentNormal));
-        if (dirIdx === -1) continue;
-        
-        const expectedMat = [
-          CUBE_MATERIALS.R, CUBE_MATERIALS.L, CUBE_MATERIALS.U,
-          CUBE_MATERIALS.D, CUBE_MATERIALS.F, CUBE_MATERIALS.B
-        ][dirIdx];
-        
-        if (mat !== expectedMat) return false;
-      }
-    }
-    return true;
-  };
+// Face names that hover in 3D just off each face, billboarded toward the
+// camera. Centers never move on a 3x3, so these live at fixed positions in the
+// cube frame and don't turn with moves. Placement distance + styling come from
+// SCENE.label. Depth-testing lets the cube occlude far-side labels.
+const D = SCENE.label.distance;
+const FACE_LABELS: { name: string; color: string; pos: [number, number, number] }[] = [
+  { name: 'Right', color: COLORS.R, pos: [D, 0, 0] },
+  { name: 'Left', color: COLORS.L, pos: [-D, 0, 0] },
+  { name: 'Up', color: COLORS.U, pos: [0, D, 0] },
+  { name: 'Down', color: COLORS.D, pos: [0, -D, 0] },
+  { name: 'Front', color: COLORS.F, pos: [0, 0, D] },
+  { name: 'Back', color: COLORS.B, pos: [0, 0, -D] },
+];
 
-  // Bake a completed move into the piece state: rotate the on-face pieces by
-  // the finalized quaternion and round positions to kill float drift. This is
-  // the single source of truth for a move's permanent effect — used both when
-  // an animated move finishes (useFrame) and for instant setup (applyInstant),
-  // so both must go through the getAxis/getAngleSign path (NOT the live-display
-  // sign block below) to stay in sync.
-  const applyMoveToPieces = (move: Move) => {
-    const axis = getAxis(move.face);
-    const targetProgress = move.dir === 2 ? Math.PI : Math.PI / 2;
-    const angle = targetProgress * Math.sign(move.dir === 2 ? 1 : move.dir) * getAngleSign(move.face);
-    const rotQuat = new THREE.Quaternion().setFromAxisAngle(axis, angle);
+function FaceLabels() {
+  return (
+    <>
+      {FACE_LABELS.map((l) => (
+        <Billboard key={l.name} position={l.pos}>
+          <Text
+            fontSize={SCENE.label.fontSize}
+            color={l.color}
+            anchorX="center"
+            anchorY="middle"
+            outlineWidth={SCENE.label.outlineWidth}
+            outlineColor={SCENE.label.outlineColor}
+            fontWeight="bold"
+          >
+            {l.name.toUpperCase()}
+          </Text>
+        </Billboard>
+      ))}
+    </>
+  );
+}
 
-    pieces.current.forEach(p => {
-      if (isOnFace(p.position, move.face)) {
-        p.position.applyQuaternion(rotQuat);
-        p.position.x = Math.round(p.position.x);
-        p.position.y = Math.round(p.position.y);
-        p.position.z = Math.round(p.position.z);
-        p.quaternion.premultiply(rotQuat);
-      }
-    });
-  };
+export const RubiksCube = React.forwardRef(
+  (
+    props: { onMoveStart?: () => void; onMoveEnd?: (isSolved: boolean) => void; onReady?: () => void },
+    ref
+  ) => {
+    const pieces = useRef<Piece[]>(initPieces());
+    const [, setRender] = useState(0); // Trigger re-render (state lives in refs)
 
-  // Let the parent know the cube has mounted (it lives inside a <Suspense>, so
-  // the ref isn't usable until the hand model resolves and this renders).
-  useEffect(() => {
-    props.onReady?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const moveQueue = useRef<Move[]>([]);
+    const currentMove = useRef<{ move: Move; progress: number } | null>(null);
+    const ROTATION_SPEED = CONFIG.rotationSpeed; // Radians per second (VITE_ROTATION_SPEED)
 
-  // Expose API to parent for adding moves
-  React.useImperativeHandle(ref, () => ({
-    executeMove: (moveStr: string) => {
-      const moves = moveStr.split(' ').filter(Boolean);
-      moves.forEach(m => {
-        const face = m[0];
-        let dir = 1;
-        if (m.includes("'")) dir = -1;
-        if (m.includes("2")) dir = 2;
-        moveQueue.current.push({ face, dir });
-      });
-      if (!currentMove.current && moveQueue.current.length > 0) {
+    const setIsRotating = useStore((state) => state.setIsRotating);
+
+    // Let the parent know the cube has mounted (it lives inside a <Suspense>, so
+    // the ref isn't usable until the hand model resolves and this renders).
+    useEffect(() => {
+      props.onReady?.();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const enqueue = (moves: Move[]) => {
+      if (moves.length === 0) return;
+      moveQueue.current.push(...moves);
+      if (!currentMove.current) {
         setIsRotating(true);
         props.onMoveStart?.();
       }
-    },
-    // Apply a sequence instantly (no animation, no timer callbacks). Used to
-    // set the learning path's start position. Goes through the same bake path
-    // as a finished animated move, so state matches executeMove exactly.
-    applyInstant: (moveStr: string) => {
-      moveStr.split(' ').filter(Boolean).forEach(m => {
-        const face = m[0];
-        let dir = 1;
-        if (m.includes("'")) dir = -1;
-        if (m.includes("2")) dir = 2;
-        applyMoveToPieces({ face, dir });
-      });
-      setRender(r => r + 1);
-    },
-    reset: () => {
-      pieces.current = initCube();
-      moveQueue.current = [];
-      currentMove.current = null;
-      setIsRotating(false);
-      setRender(r => r + 1);
-    }
-  }));
+    };
 
-  useFrame((state, delta) => {
-    if (!currentMove.current && moveQueue.current.length > 0) {
-      const nextMove = moveQueue.current.shift()!;
-      currentMove.current = { move: nextMove, progress: 0 };
-      setIsRotating(true);
-    }
+    // Expose API to parent.
+    React.useImperativeHandle(ref, () => ({
+      // Standard human notation, e.g. "R U R' U2".
+      executeMove: (moveStr: string) => enqueue(parseMoves(moveStr)),
+      // A sequence in rubiks-cube-solver notation (prime suffix, lowercase wide,
+      // uppercase slices). Used to play back a computed solution step.
+      executeSolution: (moveStr: string) => enqueue(translateSolverSequence(moveStr)),
+      // Read the current state as the solver's 54-char facelet string.
+      getFacelets: () => getFacelets(pieces.current),
+      // Apply a human-notation sequence instantly (no animation / callbacks).
+      applyInstant: (moveStr: string) => {
+        parseMoves(moveStr).forEach((m) => applyMove(pieces.current, m));
+        setRender((r) => r + 1);
+      },
+      reset: () => {
+        pieces.current = initPieces();
+        moveQueue.current = [];
+        currentMove.current = null;
+        setIsRotating(false);
+        setRender((r) => r + 1);
+      },
+    }));
 
-    if (currentMove.current) {
-      const { move, progress } = currentMove.current;
-      const step = ROTATION_SPEED * delta;
-      
-      let nextProgress = progress + step;
-      let targetProgress = move.dir === 2 ? Math.PI : Math.PI / 2;
-      let isDone = false;
-
-      if (nextProgress >= targetProgress) {
-        nextProgress = targetProgress;
-        isDone = true;
+    useFrame((state, delta) => {
+      // Pulse the active layer's glow while a move is animating.
+      if (currentMove.current) {
+        const { base, amplitude, frequency } = SCENE.highlight;
+        setHighlightIntensity(base + amplitude * Math.sin(state.clock.elapsedTime * frequency));
       }
 
-      currentMove.current.progress = nextProgress;
+      if (!currentMove.current && moveQueue.current.length > 0) {
+        currentMove.current = { move: moveQueue.current.shift()!, progress: 0 };
+        setIsRotating(true);
+      }
 
-      // Force render to update pieces in useFrame if needed, but we can do it locally on refs
-      // Actually, since we update the meshes directly, we don't need to trigger React state!
-      // But we need refs to the meshes.
-      setRender(r => r + 1); // For simplicity, we trigger render. Optimization: update mesh refs directly.
+      if (currentMove.current) {
+        const { move, progress } = currentMove.current;
+        const targetProgress = move.dir === 2 ? Math.PI : Math.PI / 2;
+        let nextProgress = progress + ROTATION_SPEED * delta;
+        let isDone = false;
 
-      if (isDone) {
-        // Finalize rotation in state (shared bake path).
-        applyMoveToPieces(move);
+        if (nextProgress >= targetProgress) {
+          nextProgress = targetProgress;
+          isDone = true;
+        }
+        currentMove.current.progress = nextProgress;
+        setRender((r) => r + 1); // pieces live in refs, so nudge React each frame
 
-        currentMove.current = null;
-        if (moveQueue.current.length === 0) {
-          setIsRotating(false);
-          props.onMoveEnd?.(checkSolved());
+        if (isDone) {
+          applyMove(pieces.current, move); // shared bake path (rounds positions)
+          currentMove.current = null;
+          if (moveQueue.current.length === 0) {
+            setIsRotating(false);
+            props.onMoveEnd?.(isSolved(pieces.current));
+          }
         }
       }
-    }
-  });
+    });
 
-  const getAxis = (face: string) => {
-    switch (face) {
-      case 'R': case 'L': return new THREE.Vector3(1, 0, 0);
-      case 'U': case 'D': return new THREE.Vector3(0, 1, 0);
-      case 'F': case 'B': return new THREE.Vector3(0, 0, 1);
-      default: return new THREE.Vector3(1, 0, 0);
-    }
-  };
+    const active = currentMove.current;
 
-  const getAngleSign = (face: string) => {
-    switch (face) {
-      case 'R': case 'U': case 'F': return -1; // Standard mathematical rotation sign might differ, we tune this
-      case 'L': case 'D': case 'B': return 1;
-      default: return 1;
-    }
-  };
+    return (
+      <group>
+        {/* Right / Left robot hands mirror the active R/L turn. */}
+        <RobotHand
+          side="R"
+          isActive={active?.move.face === 'R'}
+          dir={active?.move.face === 'R' ? active.move.dir : 1}
+          progress={active?.move.face === 'R' ? active.progress : 0}
+        />
+        <RobotHand
+          side="L"
+          isActive={active?.move.face === 'L'}
+          dir={active?.move.face === 'L' ? active.move.dir : 1}
+          progress={active?.move.face === 'L' ? active.progress : 0}
+        />
 
-  const isOnFace = (pos: THREE.Vector3, face: string) => {
-    const EPSILON = 0.1;
-    switch (face) {
-      case 'R': return pos.x > EPSILON;
-      case 'L': return pos.x < -EPSILON;
-      case 'U': return pos.y > EPSILON;
-      case 'D': return pos.y < -EPSILON;
-      case 'F': return pos.z > EPSILON;
-      case 'B': return pos.z < -EPSILON;
-      default: return false;
-    }
-  };
+        {active && <RotationArrow move={active.move} />}
+        <FaceLabels />
 
-  // Correct rotation directions
-  const getAngle = (face: string, dir: number) => {
-    let sign = 1;
-    if (face === 'R' || face === 'U' || face === 'F') sign = -1;
-    if (face === 'L' || face === 'D' || face === 'B') sign = 1;
-    
-    // Some faces need inverted signs based on standard Rubik's notation
-    // R: clockwise is -x (wait, looking at R, clockwise is -x? Let's test)
-    // Actually: 
-    // Right (X axis): Clockwise looking at Right is -X rotation
-    // Left (-X axis): Clockwise looking at Left is +X rotation
-    // Up (Y axis): Clockwise looking at Top is -Y rotation
-    // Down (-Y axis): Clockwise looking at Bottom is +Y rotation
-    // Front (Z axis): Clockwise looking at Front is -Z rotation
-    // Back (-Z axis): Clockwise looking at Back is +Z rotation
-    return (dir === 2 ? 2 : dir) * sign * (Math.PI / 2);
-  };
+        {pieces.current.map((p) => {
+          const displayPos = p.position.clone();
+          const displayQuat = p.quaternion.clone();
+          const onMove = !!active && isOnMove(p.position, active.move);
 
-  return (
-    <group>
-      {/* Right Hand */}
-      <RobotHand 
-        side="R" 
-        isActive={currentMove.current?.move.face === 'R'} 
-        dir={currentMove.current?.move.face === 'R' ? currentMove.current.move.dir : 1}
-        progress={currentMove.current?.move.face === 'R' ? currentMove.current.progress : 0}
-      />
-      {/* Left Hand */}
-      <RobotHand 
-        side="L" 
-        isActive={currentMove.current?.move.face === 'L'} 
-        dir={currentMove.current?.move.face === 'L' ? currentMove.current.move.dir : 1}
-        progress={currentMove.current?.move.face === 'L' ? currentMove.current.progress : 0}
-      />
-
-      {pieces.current.map(p => {
-        let displayPos = p.position.clone();
-        let displayQuat = p.quaternion.clone();
-
-        if (currentMove.current) {
-          const { move, progress } = currentMove.current;
-          if (isOnFace(p.position, move.face)) {
-            const axis = getAxis(move.face);
-            // Sign mapping for visual progress
-            let sign = 1;
-            if (move.face === 'R' || move.face === 'U' || move.face === 'F') sign = -1;
-            if (move.face === 'L' || move.face === 'D' || move.face === 'B') sign = 1;
-            
-            const angle = progress * (move.dir === 2 ? 1 : Math.sign(move.dir)) * sign;
-            const tempQuat = new THREE.Quaternion().setFromAxisAngle(axis, angle);
-            
+          if (active && onMove) {
+            const { axisVec } = resolveMove(active.move);
+            const angle = progressAngle(active.move, active.progress);
+            const tempQuat = new THREE.Quaternion().setFromAxisAngle(axisVec, angle);
             displayPos.applyQuaternion(tempQuat);
             displayQuat.premultiply(tempQuat);
           }
-        }
 
-        return (
-          <mesh
-            key={p.id}
-            position={displayPos}
-            quaternion={displayQuat}
-            material={p.materials}
-          >
-            <boxGeometry args={[0.95, 0.95, 0.95]} />
-          </mesh>
-        );
-      })}
-    </group>
-  );
-});
+          return (
+            <mesh
+              key={p.id}
+              position={displayPos}
+              quaternion={displayQuat}
+              material={materialsFor(p.colors, onMove)}
+            >
+              <boxGeometry args={[SCENE.pieceSize, SCENE.pieceSize, SCENE.pieceSize]} />
+            </mesh>
+          );
+        })}
+      </group>
+    );
+  }
+);

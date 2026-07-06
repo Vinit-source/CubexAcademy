@@ -14,7 +14,7 @@ CubeX Academy (a.k.a. "Cubify") — an interactive 3D Rubik's cube built with Re
 - `npm run lint` — **type-check only** (`tsc --noEmit`); there is no ESLint and no test suite
 - `npm run clean` — remove `dist` and `server.js`
 
-There are no tests. "Verifying" a change means running the app and exercising the cube; `npm run lint` only catches type errors.
+There is no test *suite*, but the cube math lives in a pure module (`src/lib/cube-engine.ts`) that can be round-tripped in Node: `npx tsx <script>.ts` — **run from the repo root** so `node_modules` (incl. `rubiks-cube-solver`) resolves; a scratchpad path won't. Round-trip pattern: solved → scramble → `getFacelets` → `solver()` → `translateSolverSequence` → `applyMove` → assert `isSolved`. `npm run lint` only catches type errors.
 
 ## Environment notes
 
@@ -28,19 +28,15 @@ Single-page app. `src/main.tsx` → `App.tsx` mounts one `<Canvas>` containing t
 
 Three coordinating pieces:
 
-1. **`src/store.ts` (Zustand)** — global app state: mode (`learning` | `freeplay`), timer, best time, learned-algorithm ids, current algorithm index, and `isRotating`. The list of teachable `algorithms` (name, move string, description) is a hardcoded const here.
+1. **`src/store.ts` (Zustand)** — global app state: mode (`learning` | `freeplay`), timer, best time, `learnedStages`, `isRotating`, and the **computed solution** (`solutionSteps` + `currentStepIndex`). `STAGES` is a static teaching catalog (name/description/goal per CFOP stage); `buildSolution(facelets)` calls `rubiks-cube-solver` and flattens its `{cross[4], f2l[4], oll, pll}` output into ordered `SolutionStep`s. The learning path is a **real solve of whatever the cube is scrambled to** — not a canned sequence.
 
-2. **`src/components/Cube.tsx` (`RubiksCube`)** — the engine. Key design decisions:
-   - The cube is **27 pieces stored in a ref** (`pieces.current`), each with a `position` (Vector3), `quaternion`, and a 6-element `materials` array ordered `[R, L, U, D, F, B]`. Non-visible inner faces use a shared `CORE` (black) material.
-   - Moves are **queued** (`moveQueue`) and animated one at a time inside `useFrame`, interpolating `progress` toward π/2 (or π for `2` turns) at `ROTATION_SPEED`. During animation, on-face pieces are rendered at a *temporary* rotated transform; when a move completes, the rotation is baked into each piece's `position`/`quaternion` and **positions are rounded to integers** to kill floating-point drift.
-   - Re-renders during animation are forced with a dummy `setRender(r => r+1)` counter — state lives in refs, not React state, so React must be nudged each frame.
-   - **Exposes an imperative API via `useImperativeHandle`:** `executeMove(moveStr)` (space-separated standard notation, e.g. `"R U R' U'"`, where `'` = counter-clockwise and `2` = 180°) and `reset()`. `App.tsx` calls these through `cubeRef`.
-   - `checkSolved()` verifies each visible face's material matches the expected material for its current outward normal.
-   - **Gotcha — rotation sign mapping:** the clockwise/counter-clockwise sign per face is duplicated in two places (the `getAngleSign`/inline-`sign` used for the finalized bake, and the inline `sign` used for the live display transform). They must stay in sync. `getAngle` and `getAngleSign` also contain dead/experimental code and exploratory comments — treat the actual behavior in `useFrame` and the render loop as source of truth, not those helpers.
+2. **`src/lib/cube-engine.ts`** — the pure, framework-free cube math (source of truth, Node-testable). 27 `Piece`s each with `position` (Vector3), `quaternion`, and a 6-slot `colors` array ordered `[R, L, U, D, F, B]` (`null` = inner core). Exports `applyMove` (the single bake path — rotates the move's layer and **rounds positions to integers** to kill float drift), `isOnMove`/`resolveMove` (generalized layer selection: outer faces **plus** wide `r`/`l`/… and slices `M`/`E`/`S`), `progressAngle`/`finalAngle` (rotation driven by **one** `FACE_SIGN` map — no more duplicated sign logic), `getFacelets`/`isSolved`, and notation helpers (`parseMoves`, `translateSolverSequence`, `formatMoves`).
 
-3. **`src/components/UI.tsx`** — all HUD panels in a CSS grid, plus two global input paths: a `keydown` listener (R/L/U/D/F/B, Shift = inverse) and on-screen/touch buttons, both funneling through `onExecuteMove`. Inputs are gated by `isRotating`. The solve timer runs on a `setInterval` here but its start/stop *logic* lives in `App.tsx`'s move callbacks.
+3. **`src/components/Cube.tsx` (`RubiksCube`)** — R3F rendering + the animation queue only (delegates all math to `cube-engine`). Moves are **queued** (`moveQueue`) and animated one at a time in `useFrame` at `ROTATION_SPEED`; a completed move is baked via `applyMove`. Re-renders are forced with a dummy `setRender(r => r+1)` since state lives in refs. Maps each piece's `colors` → Three materials (with glowing `HIGHLIGHT_MATERIALS` for the actively-turning layer; a `RotationArrow` glyph shows turn direction). **Imperative API** (`useImperativeHandle`, called via `cubeRef`): `executeMove(str)` (human notation), `executeSolution(str)` (solver notation), `getFacelets()`, `applyInstant(str)`, `reset()`.
 
-**Timer flow is split intentionally:** `App.tsx`'s `handleMoveStart`/`handleMoveEnd` decide *when* to start/stop the timer (freeplay only, ignoring scramble moves via the `isScrambling` ref), while `store.ts` holds the timer state and `UI.tsx` drives the tick. Scrambling generates 20 random moves and routes them through the same `executeMove` queue.
+4. **`src/components/UI.tsx`** — all HUD panels in a CSS grid, plus two global input paths: a `keydown` listener (WASD+Q/E → faces, Shift = inverse) and on-screen/touch buttons, both funneling through `onExecuteMove`. Inputs are gated by `isRotating`. The learning panels render from `solutionSteps`/`currentStepIndex`; "Play Step" calls `onExecuteSolution`. The solve timer runs on a `setInterval` here but its start/stop *logic* lives in `App.tsx`'s move callbacks.
+
+**Timer flow is split intentionally:** `App.tsx`'s `handleMoveStart`/`handleMoveEnd` decide *when* to start/stop the timer (freeplay only, ignoring scramble moves via the `isScrambling` ref), while `store.ts` holds the timer state and `UI.tsx` drives the tick. **Freeplay** scramble = 20 animated random moves through the `executeMove` queue. **Learning** scramble (`setupLearning`) applies 25 random moves *instantly* (`applyInstant`), then `buildSolution(getFacelets())` computes the guided steps; Reset retries the same scramble.
 
 `RobotHand` (`Hands.tsx`) is purely decorative — box-geometry hands that twist in sync with the active R/L move's `progress`.
 
@@ -48,4 +44,5 @@ Three coordinating pieces:
 
 - Styling is **Tailwind v4** via `@tailwindcss/vite` (`src/index.css` is just `@import "tailwindcss"`). Use the `cn()` helper in `src/lib/utils.ts` (clsx + tailwind-merge) for conditional classes.
 - Icons come from `lucide-react`.
-- Cube move strings use standard Rubik's notation; parsing lives in `executeMove` (first char = face, presence of `'` or `2` = modifier).
+- Cube move strings use standard Rubik's notation; parsing lives in `cube-engine.ts` (`parseMoves`), not the component.
+- **`rubiks-cube-solver` notation is quirky** (handled by `translateSolverToken`): `prime` suffix instead of `'`; lowercase = wide/double-layer (`bprime`); but middle slices come back UPPERCASE with UPPERCASE `PRIME` (`SPRIME`), and half-slice turns as `MPRIME2`. Match the modifier case-insensitively; a `2` always wins over a stray `prime` (180° is its own inverse). Its default orientation (front=green, up=white, right=red) matches this app's colors.

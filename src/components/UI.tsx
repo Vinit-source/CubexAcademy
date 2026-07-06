@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
-import { useStore, algorithms } from '../store';
-import { Play, CheckCircle2, Shuffle, RotateCcw, Gamepad2, GraduationCap, Trophy } from 'lucide-react';
+import { useStore, STAGES, STAGE_ORDER } from '../store';
+import { Play, CheckCircle2, Shuffle, RotateCcw, Gamepad2, GraduationCap, Trophy, Sparkles } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 // Physical key -> cube face. WASD cluster drives Up/Down/Right/Left; Q/E the
@@ -11,12 +11,13 @@ const KEY_TO_FACE: Record<string, string> = {
 
 interface UIProps {
   onExecuteMove: (move: string) => void;
+  onExecuteSolution: (move: string) => void;
   onScramble: () => void;
   onReset: () => void;
   children: React.ReactNode;
 }
 
-export function UI({ onExecuteMove, onScramble, onReset, children }: UIProps) {
+export function UI({ onExecuteMove, onExecuteSolution, onScramble, onReset, children }: UIProps) {
   const {
     mode,
     setMode,
@@ -27,15 +28,18 @@ export function UI({ onExecuteMove, onScramble, onReset, children }: UIProps) {
     stopTimer,
     resetTimer,
     updateTimer,
-    learnedAlgorithms,
-    markLearned,
-    currentAlgorithmIndex,
-    setCurrentAlgorithm,
+    learnedStages,
+    toggleStageLearned,
+    solutionSteps,
+    currentStepIndex,
+    setCurrentStep,
     isRotating
   } = useStore();
 
-  const currentAlgorithm = algorithms[currentAlgorithmIndex];
-  const isLearned = learnedAlgorithms.includes(currentAlgorithm.id);
+  const currentStep = solutionSteps[currentStepIndex];
+  const currentStage = currentStep ? STAGES[currentStep.stage] : null;
+  const stageLearned = currentStep ? learnedStages.includes(currentStep.stage) : false;
+  const solveComplete = solutionSteps.length > 0 && currentStepIndex >= solutionSteps.length;
 
   // Timer loop
   useEffect(() => {
@@ -99,37 +103,48 @@ export function UI({ onExecuteMove, onScramble, onReset, children }: UIProps) {
           <>
             <div className="flex justify-between items-end mt-2">
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Learning Path</h3>
-              <span className="text-xs font-mono text-indigo-400 font-bold">Step {currentAlgorithmIndex + 1}/{algorithms.length}</span>
+              {solutionSteps.length > 0 && (
+                <span className="text-xs font-mono text-indigo-400 font-bold">
+                  Step {Math.min(currentStepIndex + 1, solutionSteps.length)}/{solutionSteps.length}
+                </span>
+              )}
             </div>
-            <div className="flex flex-col gap-3 flex-1 overflow-y-auto pr-2">
-              {algorithms.map((algo, idx) => {
-                const isActive = idx === currentAlgorithmIndex;
-                const isAlgoLearned = learnedAlgorithms.includes(algo.id);
-                return (
-                  <button 
-                    key={algo.id}
-                    onClick={() => setCurrentAlgorithm(idx)}
-                    className={cn(
-                      "p-3 rounded-xl flex items-center gap-3 text-left transition-all",
-                      isActive ? "bg-indigo-600/10 border border-indigo-500/30" : "bg-slate-800/40 hover:bg-slate-800/60",
-                      !isActive && !isAlgoLearned && "grayscale opacity-60"
-                    )}
-                  >
-                    <div className={cn(
-                      "w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold shrink-0",
-                      isActive ? "bg-indigo-500 text-white" : "bg-slate-700 text-slate-300",
-                      isAlgoLearned && !isActive && "bg-emerald-500/20 text-emerald-500"
-                    )}>
-                      {isAlgoLearned ? <CheckCircle2 className="w-4 h-4" /> : (idx + 1).toString().padStart(2, '0')}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      {isActive && <p className="text-[10px] uppercase font-bold text-indigo-400 mb-1">In Progress</p>}
-                      <p className={cn("text-xs font-bold leading-tight truncate", isActive ? "text-sm text-white" : "text-slate-300")}>{algo.name}</p>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
+            {solutionSteps.length === 0 ? (
+              <div className="flex-1 flex flex-col justify-center items-center text-center gap-3 text-slate-500">
+                <Shuffle className="w-8 h-8" />
+                <p className="text-xs">Hit <span className="font-bold text-indigo-400">Scramble</span> to generate a real, step-by-step solution to walk through.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 flex-1 overflow-y-auto pr-2">
+                {solutionSteps.map((step, idx) => {
+                  const isActive = idx === currentStepIndex && !solveComplete;
+                  const isDone = idx < currentStepIndex;
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => setCurrentStep(idx)}
+                      className={cn(
+                        "p-2.5 rounded-xl flex items-center gap-3 text-left transition-all",
+                        isActive ? "bg-indigo-600/10 border border-indigo-500/30" : "bg-slate-800/40 hover:bg-slate-800/60",
+                        !isActive && !isDone && "opacity-60"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold shrink-0",
+                        isActive ? "bg-indigo-500 text-white" : "bg-slate-700 text-slate-300",
+                        isDone && !isActive && "bg-emerald-500/20 text-emerald-500"
+                      )}>
+                        {isDone ? <CheckCircle2 className="w-4 h-4" /> : (idx + 1).toString().padStart(2, '0')}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={cn("text-xs font-bold leading-tight truncate", isActive ? "text-white" : "text-slate-300")}>{step.label}</p>
+                        <p className="text-[10px] font-mono text-slate-500 truncate">{step.human}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </>
         ) : (
           <div className="flex-1 flex flex-col justify-center items-center text-center gap-4">
@@ -149,13 +164,23 @@ export function UI({ onExecuteMove, onScramble, onReset, children }: UIProps) {
           {children}
         </div>
 
-        {/* Current Algorithm overlay inside Canvas area like the design */}
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full text-center z-20 pointer-events-none">
-          <div className="inline-block bg-indigo-600/90 backdrop-blur px-4 py-2 rounded-full text-xs font-black uppercase tracking-[0.2em] shadow-lg shadow-indigo-500/40">
-            {currentAlgorithm.moves}
+        {/* Current step overlay inside the Canvas area */}
+        {mode === 'learning' && (currentStep || solveComplete) && (
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 w-full text-center z-20 pointer-events-none">
+            {solveComplete ? (
+              <div className="inline-flex items-center gap-2 bg-emerald-600/90 backdrop-blur px-4 py-2 rounded-full text-xs font-black uppercase tracking-[0.2em] shadow-lg shadow-emerald-500/40">
+                <Sparkles className="w-4 h-4" /> Solved
+              </div>
+            ) : (
+              <>
+                <div className="inline-block bg-indigo-600/90 backdrop-blur px-4 py-2 rounded-full text-xs font-black uppercase tracking-[0.2em] shadow-lg shadow-indigo-500/40">
+                  {currentStep!.human}
+                </div>
+                <p className="text-[10px] text-slate-400 mt-2 font-medium uppercase drop-shadow-md">{currentStep!.label}</p>
+              </>
+            )}
           </div>
-          <p className="text-[10px] text-slate-400 mt-2 font-medium uppercase drop-shadow-md">Current Algorithm Segment</p>
-        </div>
+        )}
       </div>
 
       {/* 3. Timer */}
@@ -194,14 +219,31 @@ export function UI({ onExecuteMove, onScramble, onReset, children }: UIProps) {
         </div>
       </div>
 
-      {/* 4. Daily Goal / Progress */}
-      <div className="col-span-1 md:col-span-3 md:row-span-1 bg-indigo-600 rounded-2xl p-4 flex items-center justify-between shadow-lg shadow-indigo-600/20">
-        <div className="flex flex-col">
-          <span className="text-[10px] font-black uppercase tracking-widest opacity-80 text-white">Algorithms Learned</span>
-          <span className="text-lg font-black text-white">{learnedAlgorithms.length} / {algorithms.length}</span>
+      {/* 4. Progress — per-stage mastery (auto-fills as you complete each stage) */}
+      <div className="col-span-1 md:col-span-3 md:row-span-1 bg-indigo-600 rounded-2xl p-4 flex flex-col justify-center gap-2 shadow-lg shadow-indigo-600/20">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-black uppercase tracking-widest opacity-80 text-white">Stages Mastered</span>
+          <span className="text-sm font-black text-white tabular-nums">{learnedStages.length}/{STAGE_ORDER.length}</span>
         </div>
-        <div className="w-12 h-12 rounded-full border-2 border-white/20 flex items-center justify-center font-bold text-sm text-white">
-          {Math.round((learnedAlgorithms.length / algorithms.length) * 100)}%
+        <div className="flex gap-1.5">
+          {STAGE_ORDER.map((s) => {
+            const done = learnedStages.includes(s);
+            const active = currentStep?.stage === s && !solveComplete;
+            return (
+              <div
+                key={s}
+                title={STAGES[s].name}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1 rounded-md py-1 text-[9px] font-black uppercase tracking-wider transition-colors",
+                  done ? "bg-white text-indigo-700" : "bg-white/10 text-white/70",
+                  active && !done && "ring-2 ring-white/70"
+                )}
+              >
+                {done && <CheckCircle2 className="w-3 h-3" />}
+                {s.toUpperCase()}
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -283,53 +325,59 @@ export function UI({ onExecuteMove, onScramble, onReset, children }: UIProps) {
       {/* 6. Execution & Action */}
       <div className="col-span-1 md:col-span-8 md:row-span-2 bg-slate-900/50 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between shadow-xl">
         {mode === 'learning' ? (
-          <>
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">{currentAlgorithm.name}</h3>
-              {isLearned && (
-                <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-                  <CheckCircle2 className="w-3 h-3" /> Learned
-                </span>
-              )}
+          solveComplete ? (
+            <div className="flex-1 flex flex-col justify-center items-center text-center gap-3">
+              <Sparkles className="w-10 h-10 text-emerald-400" />
+              <h3 className="text-lg font-bold text-white">Cube Solved!</h3>
+              <p className="text-xs text-slate-400">Scramble again for a fresh solve, or hit Reset to retry this one.</p>
             </div>
-            
-            <p className="text-sm text-slate-300 mb-3">{currentAlgorithm.description}</p>
-
-            <div className="mb-4 flex items-start gap-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 px-3 py-2">
-              <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mt-0.5 shrink-0">Goal</span>
-              <p className="text-xs text-slate-300 leading-relaxed">{currentAlgorithm.goal}</p>
+          ) : !currentStep || !currentStage ? (
+            <div className="flex-1 flex flex-col justify-center items-center text-center gap-3">
+              <GraduationCap className="w-10 h-10 text-slate-600" />
+              <p className="text-sm text-slate-400">Scramble the cube to generate a guided, step-by-step CFOP solve.</p>
             </div>
-
-            <div className="flex gap-4 mt-auto">
-              <button
-                onClick={() => markLearned(currentAlgorithm.id)}
-                className={cn(
-                  "flex-1 p-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors border flex items-center justify-center gap-2",
-                  isLearned
-                    ? "bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-slate-300"
-                    : "bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
+          ) : (
+            <>
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">{currentStage.name} · {currentStep.label}</h3>
+                {stageLearned && (
+                  <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                    <CheckCircle2 className="w-3 h-3" /> Mastered
+                  </span>
                 )}
-              >
-                {isLearned ? 'Mark Unlearned' : 'Mark Learned'}
-              </button>
-              
-              <button
-                onClick={() => {
-                  onExecuteMove(currentAlgorithm.moves);
-                  // Walk the guided path in order: after playing a step, advance
-                  // to the next so Play x6 takes the cube from start to solved.
-                  if (currentAlgorithmIndex < algorithms.length - 1) {
-                    setCurrentAlgorithm(currentAlgorithmIndex + 1);
-                  }
-                }}
-                disabled={isRotating}
-                className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white p-3 rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg shadow-indigo-500/20 transition-colors disabled:opacity-50 disabled:shadow-none"
-              >
-                <Play className="w-4 h-4" fill="currentColor" />
-                Play Demo
-              </button>
-            </div>
-          </>
+              </div>
+
+              <p className="text-sm text-slate-300 mb-3">{currentStage.description}</p>
+
+              <div className="mb-4 flex items-start gap-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 px-3 py-2">
+                <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mt-0.5 shrink-0">Goal</span>
+                <p className="text-xs text-slate-300 leading-relaxed">{currentStage.goal}</p>
+              </div>
+
+              <div className="flex gap-4 mt-auto">
+                <button
+                  onClick={() => toggleStageLearned(currentStep.stage)}
+                  className={cn(
+                    "flex-1 p-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-colors border flex items-center justify-center gap-2",
+                    stageLearned
+                      ? "bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-slate-300"
+                      : "bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30 text-emerald-400"
+                  )}
+                >
+                  {stageLearned ? 'Mark Unmastered' : 'Mark Mastered'}
+                </button>
+
+                <button
+                  onClick={() => onExecuteSolution(currentStep.moves)}
+                  disabled={isRotating}
+                  className="flex-1 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white p-3 rounded-xl font-bold text-xs uppercase tracking-wider shadow-lg shadow-indigo-500/20 transition-colors disabled:opacity-50 disabled:shadow-none"
+                >
+                  <Play className="w-4 h-4" fill="currentColor" />
+                  Play Step
+                </button>
+              </div>
+            </>
+          )
         ) : (
           <div className="flex-1 flex flex-col justify-center items-center">
              <p className="text-sm text-slate-400 font-medium">Use the keyboard or on-screen controls to solve the cube!</p>

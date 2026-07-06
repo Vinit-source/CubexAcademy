@@ -1,82 +1,74 @@
 import { create } from 'zustand';
+import solver from 'rubiks-cube-solver';
+import { solverToHuman } from './lib/cube-engine';
 
-export type Algorithm = {
-  id: string;
-  name: string;
-  moves: string;
-  description: string;
-  /** What this step is trying to achieve in the overall solve. */
-  goal: string;
+export type Stage = 'cross' | 'f2l' | 'oll' | 'pll';
+
+/** Static teaching content for each CFOP stage (the moves are computed per solve). */
+export const STAGES: Record<Stage, { name: string; description: string; goal: string }> = {
+  cross: {
+    name: 'The Cross',
+    description:
+      'The foundation. Solve four edges around one center to form a cross, each edge matching its neighbouring centers.',
+    goal: 'Build the first-layer cross — four edges lined up with their centers. Everything is built on top of this.',
+  },
+  f2l: {
+    name: 'First Two Layers (F2L)',
+    description:
+      'Pair each corner with its matching edge and insert them together into a slot. Done four times, this completes the first two layers.',
+    goal: 'Fill the four corner–edge slots so the entire bottom two layers are solid.',
+  },
+  oll: {
+    name: 'Orient Last Layer (OLL)',
+    description:
+      'A single algorithm that twists and flips the last-layer pieces so the whole top face becomes one solid color.',
+    goal: 'Make the entire last-layer face one color (orientation only — positions come next).',
+  },
+  pll: {
+    name: 'Permute Last Layer (PLL)',
+    description:
+      'The final algorithm. Cycle the last-layer corners and edges into their correct positions.',
+    goal: 'Slot every last-layer piece into place — the cube is solved.',
+  },
 };
 
-// The learning path is an ordered, layer-by-layer beginner's solve. Played in
-// order from the start position (see LEARNING_START), each step completes one
-// real stage and the final step leaves the cube solved. The stages use only
-// standard face notation (R L U D F B, with ' and 2) — everything the engine
-// in Cube.tsx understands.
-export const algorithms: Algorithm[] = [
-  {
-    id: '1',
-    name: 'The Cross',
-    moves: "F R' D'",
-    description: 'The foundation. Line up four edges of one colour around a center to form a cross on the bottom face.',
-    goal: 'Build the cross on the bottom layer — four edges matching their center. The whole solve is built on top of this.',
-  },
-  {
-    id: '2',
-    name: 'First Layer',
-    moves: "R U R' U'",
-    description: "The right-hand trigger R U R' U'. Repeated, it drops a corner from the top into its slot without disturbing the layer below.",
-    goal: 'Seat the bottom-layer corners so the entire first face is solid.',
-  },
-  {
-    id: '3',
-    name: 'Second Layer',
-    moves: "U R U' R' U' F' U F",
-    description: "Sends a top-layer edge down into the middle row so it sits between two centers.",
-    goal: 'Place the middle-layer edges — the first two layers are now complete.',
-  },
-  {
-    id: '4',
-    name: 'Last-Layer Cross',
-    moves: "F R U R' U' F'",
-    description: "F R U R' U' F' flips the top edges upward. Apply it until a cross appears on the top face.",
-    goal: 'Orient the last-layer edges to form a cross on the top face.',
-  },
-  {
-    id: '5',
-    name: 'Orient Corners (Sune)',
-    moves: "R U R' U R U2 R'",
-    description: "Sune twists the last corners so the top colour points upward.",
-    goal: 'Orient the last-layer corners so the whole top face is one solid colour.',
-  },
-  {
-    id: '6',
-    name: 'Permute (T-Perm)',
-    moves: "R U R' U' R' F R2 U' R' U' R U R' F'",
-    description: "T-Perm swaps two adjacent corners and two edges to drop the final pieces home.",
-    goal: 'Slot the last pieces into place — the cube is solved.',
-  },
-];
+export const STAGE_ORDER: Stage[] = ['cross', 'f2l', 'oll', 'pll'];
 
-/**
- * Invert a space-separated move sequence (reverse order, invert each move).
- * A move and its inverse compose to identity in the Cube.tsx engine, so
- * applying LEARNING_START and then every stage in order returns the cube to
- * solved — that is the guarantee behind the guided solve.
- */
-export function invertMoves(seq: string): string {
-  return seq
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .reverse()
-    .map((m) => (m.endsWith('2') ? m : m.endsWith("'") ? m.slice(0, -1) : m + "'"))
-    .join(' ');
+/** One playable step of a computed solution. */
+export interface SolutionStep {
+  stage: Stage;
+  /** Short label, e.g. "Cross — Edge 2", "F2L — Pair 3", "OLL", "PLL". */
+  label: string;
+  /** Moves in rubiks-cube-solver notation (fed to cube.executeSolution). */
+  moves: string;
+  /** Same moves in human notation, for display. */
+  human: string;
 }
 
-/** Start position for the learning path: the inverse of the full solve. */
-export const LEARNING_START = invertMoves(algorithms.map((a) => a.moves).join(' '));
+/**
+ * Compute a real CFOP solution for a facelet string and flatten it into an
+ * ordered list of playable steps. Playing every step in order genuinely solves
+ * whatever state the cube is in.
+ */
+export const buildSolution = (facelets: string): SolutionStep[] => {
+  const solution = solver(facelets, { partitioned: true }) as {
+    cross: string[];
+    f2l: string[];
+    oll: string;
+    pll: string;
+  };
+
+  const steps: SolutionStep[] = [];
+  const push = (stage: Stage, label: string, moves: string) => {
+    if (moves && moves.trim()) steps.push({ stage, label, moves, human: solverToHuman(moves) });
+  };
+
+  solution.cross.forEach((m, i) => push('cross', `Cross — Edge ${i + 1}`, m));
+  solution.f2l.forEach((m, i) => push('f2l', `F2L — Pair ${i + 1}`, m));
+  push('oll', 'OLL', solution.oll);
+  push('pll', 'PLL', solution.pll);
+  return steps;
+};
 
 export type AppMode = 'learning' | 'freeplay';
 
@@ -95,11 +87,16 @@ interface AppState {
   resetTimer: () => void;
   updateTimer: () => void;
 
-  // Learning Progress
-  learnedAlgorithms: string[];
-  markLearned: (id: string) => void;
-  currentAlgorithmIndex: number;
-  setCurrentAlgorithm: (index: number) => void;
+  // Learning progress
+  learnedStages: Stage[];
+  toggleStageLearned: (stage: Stage) => void;
+
+  // Computed solution for the current learning puzzle
+  solutionSteps: SolutionStep[];
+  currentStepIndex: number;
+  setSolution: (steps: SolutionStep[]) => void;
+  setCurrentStep: (index: number) => void;
+  advanceStep: () => void;
 
   // Cube control
   isRotating: boolean;
@@ -126,14 +123,37 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  learnedAlgorithms: [],
-  markLearned: (id) => set((state) => ({ 
-    learnedAlgorithms: state.learnedAlgorithms.includes(id) 
-      ? state.learnedAlgorithms 
-      : [...state.learnedAlgorithms, id] 
-  })),
-  currentAlgorithmIndex: 0,
-  setCurrentAlgorithm: (index) => set({ currentAlgorithmIndex: index }),
+  learnedStages: [],
+  toggleStageLearned: (stage) =>
+    set((state) => ({
+      learnedStages: state.learnedStages.includes(stage)
+        ? state.learnedStages.filter((s) => s !== stage)
+        : [...state.learnedStages, stage],
+    })),
+
+  solutionSteps: [],
+  currentStepIndex: 0,
+  setSolution: (steps) => set({ solutionSteps: steps, currentStepIndex: 0 }),
+  setCurrentStep: (index) => set({ currentStepIndex: index }),
+  // Advances up to one-past-the-last step; that terminal index is the cube's
+  // "solved" state in the UI (no step highlighted). Completing the final step of
+  // a stage auto-marks that stage mastered, so "Stages Mastered" reflects real
+  // progress as you play through a solve (manual toggling still works too).
+  advanceStep: () =>
+    set((state) => {
+      const { solutionSteps, currentStepIndex, learnedStages } = state;
+      const completed = solutionSteps[currentStepIndex];
+      const nextIndex = Math.min(currentStepIndex + 1, solutionSteps.length);
+      let stages = learnedStages;
+      if (completed) {
+        const next = solutionSteps[nextIndex];
+        const stageFinished = !next || next.stage !== completed.stage;
+        if (stageFinished && !learnedStages.includes(completed.stage)) {
+          stages = [...learnedStages, completed.stage];
+        }
+      }
+      return { currentStepIndex: nextIndex, learnedStages: stages };
+    }),
 
   isRotating: false,
   setIsRotating: (isRotating) => set({ isRotating }),
