@@ -40,7 +40,8 @@ export default function App() {
   const learningScramble = useRef('');
   const mode = useStore((s) => s.mode);
   const [cubeReady, setCubeReady] = useState(false);
-  const [showGuide, setShowGuide] = useState(false);
+  // Show the instructions guide on every page load / refresh.
+  const [showGuide, setShowGuide] = useState(true);
 
   // Scramble the cube instantly, then compute a real CFOP solution from the
   // resulting state so the learning path can walk it stage by stage. Pass

@@ -1,5 +1,7 @@
 import { X, BookOpen } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { StageDiagram } from './StageDiagram';
+import type { Stage } from '../store';
 
 interface GuideModalProps {
   open: boolean;
@@ -8,27 +10,31 @@ interface GuideModalProps {
 
 // The four CFOP (Fridrich) stages this app teaches. Content follows the standard
 // reference at https://ruwix.com/the-rubiks-cube/advanced-cfop-fridrich/.
-const STEPS: { tag: string; title: string; color: string; body: string }[] = [
+const STEPS: { tag: string; stage: Stage; title: string; color: string; body: string }[] = [
   {
     tag: '1',
+    stage: 'cross',
     title: 'Cross',
     color: 'text-emerald-400',
     body: 'Build a plus-shaped cross of four edges on one face (usually white), each edge also matching the color of its neighbouring center. Solve it on the bottom so it stays out of your way. This step is fully intuitive — no algorithms.',
   },
   {
     tag: '2',
+    stage: 'f2l',
     title: 'F2L — First Two Layers',
     color: 'text-sky-400',
     body: 'Solve the four bottom corners together with their matching middle-layer edges, one corner+edge "pair" at a time, inserting each into its slot. Completing all four finishes the entire bottom two layers at once.',
   },
   {
     tag: '3',
+    stage: 'oll',
     title: 'OLL — Orient Last Layer',
     color: 'text-amber-400',
     body: 'Make the whole top face a single solid color, ignoring the side colors for now. This is orientation only — the pieces are turned the right way up but not yet in their final spots.',
   },
   {
     tag: '4',
+    stage: 'pll',
     title: 'PLL — Permute Last Layer',
     color: 'text-rose-400',
     body: 'Move the already-oriented last-layer pieces into their correct positions. When this finishes, every side matches its center and the cube is solved.',
@@ -83,10 +89,11 @@ export function GuideModal({ open, onClose }: GuideModalProps) {
               <div className="w-8 h-8 shrink-0 rounded-lg bg-slate-900 border border-slate-700 flex items-center justify-center font-black text-sm text-white">
                 {s.tag}
               </div>
-              <div>
+              <div className="flex-1">
                 <h3 className={cn('text-sm font-bold uppercase tracking-wide mb-1', s.color)}>{s.title}</h3>
                 <p className="text-xs text-slate-300 leading-relaxed">{s.body}</p>
               </div>
+              <StageDiagram stage={s.stage} className="self-center" />
             </div>
           ))}
         </div>

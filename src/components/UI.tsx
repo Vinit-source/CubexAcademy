@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useStore, STAGES, STAGE_ORDER } from '../store';
 import { Play, CheckCircle2, Shuffle, RotateCcw, Gamepad2, GraduationCap, Trophy, Sparkles } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { StageDiagram } from './StageDiagram';
 
 // Physical key -> cube face. WASD cluster drives Up/Down/Right/Left; Q/E the
 // Front/Back faces. Shift on any of them applies the inverse turn.
@@ -40,6 +41,11 @@ export function UI({ onExecuteMove, onExecuteSolution, onScramble, onReset, chil
   const currentStage = currentStep ? STAGES[currentStep.stage] : null;
   const stageLearned = currentStep ? learnedStages.includes(currentStep.stage) : false;
   const solveComplete = solutionSteps.length > 0 && currentStepIndex >= solutionSteps.length;
+  // Index of the current step within its stage (0-based) — which cross edge /
+  // f2l pair we're on, for the StageDiagram highlight.
+  const subStepIndex = currentStep
+    ? solutionSteps.slice(0, currentStepIndex).filter((s) => s.stage === currentStep.stage).length
+    : 0;
 
   // Timer loop
   useEffect(() => {
@@ -347,7 +353,10 @@ export function UI({ onExecuteMove, onExecuteSolution, onScramble, onReset, chil
                 )}
               </div>
 
-              <p className="text-sm text-slate-300 mb-3">{currentStage.description}</p>
+              <div className="flex items-start gap-3 mb-3">
+                <p className="text-sm text-slate-300 flex-1">{currentStage.description}</p>
+                <StageDiagram stage={currentStep.stage} highlight={subStepIndex} className="mt-0.5" />
+              </div>
 
               <div className="mb-4 flex items-start gap-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 px-3 py-2">
                 <span className="text-[10px] font-black uppercase tracking-widest text-indigo-400 mt-0.5 shrink-0">Goal</span>
