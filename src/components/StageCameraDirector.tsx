@@ -2,6 +2,7 @@ import { useRef, useEffect } from 'react';
 import { useThree, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useStore, type Stage } from '../store';
+import { type FaceLetter } from '../lib/cube-engine';
 import { SCENE } from '../lib/scene-config';
 
 /**
@@ -22,7 +23,7 @@ import { SCENE } from '../lib/scene-config';
 
 const CFG = SCENE.stageCamera;
 
-type Phase = 'idle' | 'flyIn' | 'hold' | 'toSurvey' | 'survey' | 'surveyPause' | 'return';
+type Phase = 'idle' | 'flyIn' | 'hold' | 'toSurvey' | 'survey' | 'surveyPause' | 'return' | 'faceView';
 
 interface Pose {
   radius: number;
@@ -58,6 +59,15 @@ const focusPose = (stage: Stage): Pose => {
 
 const cubeCenter = (): THREE.Vector3 => new THREE.Vector3(CFG.target[0], CFG.target[1], CFG.target[2]);
 
+// The pose that looks straight at a given face. Radius is kept from the current
+// view so a face snap re-aims without zooming; for the top/bottom faces the
+// azimuth is preserved too (a spin while looking down/up reads as noise).
+const faceViewPose = (face: FaceLetter, current: Pose): Pose => {
+  const p = SCENE.faceView.poses[face];
+  const theta = face === 'U' || face === 'D' ? current.theta : p.theta;
+  return { radius: current.radius, phi: p.phi, theta, target: cubeCenter() };
+};
+
 export function StageCameraDirector() {
   const controls = useThree((s) => s.controls) as unknown as ControlsLike | null;
   const camera = useThree((s) => s.camera);
@@ -65,8 +75,13 @@ export function StageCameraDirector() {
   // Only masteredPulse needs a subscription (to latch the stage); everything
   // else is read fresh from the store inside useFrame to avoid re-render churn.
   const masteredPulse = useStore((s) => s.masteredPulse);
+  // A view-key press (I/J/K/L/U/O) latches a face to snap to; it interrupts any
+  // running mastery tour (latest input wins).
+  const faceViewPulse = useStore((s) => s.faceViewPulse);
 
   const pendingStage = useRef<Stage | null>(null);
+  const pendingFace = useRef<FaceLetter | null>(null);
+  const faceFocus = useRef<Pose | null>(null);
   const phase = useRef<Phase>('idle');
   const phaseT = useRef(0); // seconds elapsed in the current phase
 
@@ -81,6 +96,12 @@ export function StageCameraDirector() {
     if (masteredPulse === 0) return;
     pendingStage.current = useStore.getState().masteredStage;
   }, [masteredPulse]);
+
+  // Latch a requested face view; useFrame flies to it next frame.
+  useEffect(() => {
+    if (faceViewPulse === 0) return;
+    pendingFace.current = useStore.getState().faceView;
+  }, [faceViewPulse]);
 
   const readPose = (): Pose => {
     const offset = camera.position.clone().sub(controls!.target);
@@ -109,6 +130,20 @@ export function StageCameraDirector() {
     const { isRotating, cameraAnimationsEnabled: enabled } = useStore.getState();
     const sv = CFG.survey;
 
+    // A face-view key press interrupts any phase and flies straight to the face.
+    // It's a manual request, so it ignores `cameraAnimationsEnabled` (that only
+    // gates the automatic mastery tour).
+    if (pendingFace.current) {
+      const face = pendingFace.current;
+      pendingFace.current = null;
+      pendingStage.current = null; // cancel any queued mastery tour
+      fromPose.current = readPose();
+      faceFocus.current = faceViewPose(face, fromPose.current);
+      controls.enabled = false;
+      phase.current = 'faceView';
+      phaseT.current = 0;
+    }
+
     if (phase.current === 'idle') {
       const st = pendingStage.current;
       if (!st) return;
@@ -128,7 +163,8 @@ export function StageCameraDirector() {
     }
 
     // If the user turns the tour off mid-flight, glide back to rest gracefully.
-    if (!enabled && phase.current !== 'return') {
+    // A face-view snap is a manual move (not the tour), so it's exempt.
+    if (!enabled && phase.current !== 'return' && phase.current !== 'faceView') {
       fromPose.current = readPose();
       phase.current = 'return';
       phaseT.current = 0;
@@ -204,6 +240,16 @@ export function StageCameraDirector() {
         if (phaseT.current >= CFG.returnDuration) {
           controls.enabled = true;
           pendingStage.current = null;
+          phase.current = 'idle';
+          phaseT.current = 0;
+        }
+        break;
+      }
+      case 'faceView': {
+        const e = easeInOutCubic(Math.min(phaseT.current / SCENE.faceView.flyDuration, 1));
+        lerpPose(fromPose.current!, faceFocus.current!, e);
+        if (phaseT.current >= SCENE.faceView.flyDuration) {
+          controls.enabled = true; // hand control back so the user can orbit from here
           phase.current = 'idle';
           phaseT.current = 0;
         }

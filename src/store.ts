@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import solver from 'rubiks-cube-solver';
-import { solverToHuman } from './lib/cube-engine';
+import { expandHalfTurns, translateSolverSequence, toBasicFaceSegments, formatMoves, type FaceLetter } from './lib/cube-engine';
 
 export type Stage = 'cross' | 'f2l' | 'oll' | 'pll';
 
@@ -39,10 +39,17 @@ export interface SolutionStep {
   stage: Stage;
   /** Short label, e.g. "Cross — Edge 2", "F2L — Pair 3", "OLL", "PLL". */
   label: string;
-  /** Moves in rubiks-cube-solver notation (fed to cube.executeSolution). */
+  /** Raw rubiks-cube-solver notation for this step (provenance; may contain
+   *  wide/slice moves). Playback uses `drill`, not this. */
   moves: string;
-  /** Same moves in human notation, for display. */
+  /** Basic-face-only human notation (wide/slice rewritten away), for display. */
   human: string;
+  /**
+   * The canonical *drilled* sequence: `human` with every 180° turn split into
+   * two quarter turns, so each move is one key press. Progress bars, key hints,
+   * move matching and "Play step" all read this so they never desync.
+   */
+  drill: string;
 }
 
 /**
@@ -58,16 +65,32 @@ export const buildSolution = (facelets: string): SolutionStep[] => {
     pll: string;
   };
 
-  const steps: SolutionStep[] = [];
-  const push = (stage: Stage, label: string, moves: string) => {
-    if (moves && moves.trim()) steps.push({ stage, label, moves, human: solverToHuman(moves) });
+  // Gather the raw (solver-notation) steps, then rewrite the whole solution into
+  // basic face turns only (no wide/slice — those can't be keyed on WASDQE). The
+  // rewrite threads one orientation across all steps, so it must see them
+  // together; segment boundaries are preserved so each step keeps its own moves.
+  const raw: { stage: Stage; label: string; moves: string }[] = [];
+  const add = (stage: Stage, label: string, moves: string) => {
+    if (moves && moves.trim()) raw.push({ stage, label, moves });
   };
 
-  solution.cross.forEach((m, i) => push('cross', `Cross — Edge ${i + 1}`, m));
-  solution.f2l.forEach((m, i) => push('f2l', `F2L — Pair ${i + 1}`, m));
-  push('oll', 'OLL', solution.oll);
-  push('pll', 'PLL', solution.pll);
-  return steps;
+  solution.cross.forEach((m, i) => add('cross', `Cross — Edge ${i + 1}`, m));
+  solution.f2l.forEach((m, i) => add('f2l', `F2L — Pair ${i + 1}`, m));
+  add('oll', 'OLL', solution.oll);
+  add('pll', 'PLL', solution.pll);
+
+  const basicSegments = toBasicFaceSegments(raw.map((r) => translateSolverSequence(r.moves)));
+
+  return raw.map((r, i) => {
+    const basic = basicSegments[i];
+    return {
+      stage: r.stage,
+      label: r.label,
+      moves: r.moves, // raw solver notation (provenance)
+      human: formatMoves(basic),
+      drill: formatMoves(expandHalfTurns(basic)),
+    };
+  });
 };
 
 export type AppMode = 'learning' | 'freeplay';
@@ -122,6 +145,15 @@ interface AppState {
   resetAction: () => void;
   wrongPulse: number;
   flagWrong: () => void;
+
+  // Fire-once event for "snap the camera to look straight at this face"
+  // (pressed via the I/J/K/L/U/O view keys). The StageCameraDirector latches
+  // `faceView` and flies once per `faceViewPulse` bump — same pattern as
+  // `masteredPulse`, so the keypress in UI.tsx can reach the camera inside the
+  // Canvas without prop-drilling.
+  faceView: FaceLetter | null;
+  faceViewPulse: number;
+  requestFaceView: (face: FaceLetter) => void;
 
   // Cube control
   isRotating: boolean;
@@ -201,6 +233,10 @@ export const useStore = create<AppState>((set, get) => ({
   resetAction: () => set({ actionIndex: 0 }),
   wrongPulse: 0,
   flagWrong: () => set((state) => ({ wrongPulse: state.wrongPulse + 1 })),
+
+  faceView: null,
+  faceViewPulse: 0,
+  requestFaceView: (face) => set((state) => ({ faceView: face, faceViewPulse: state.faceViewPulse + 1 })),
 
   isRotating: false,
   setIsRotating: (isRotating) => set({ isRotating }),

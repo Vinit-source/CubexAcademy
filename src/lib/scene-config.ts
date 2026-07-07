@@ -23,6 +23,27 @@ export const SCENE = {
     CORE: '#111111', // Inner faces - Black
   },
 
+  /**
+   * "Snap to a face" camera moves, triggered by the I/J/K/L/U/O view keys.
+   * Spherical coords are relative to the cube center: `phi` = polar angle from
+   * +Y, `theta` = azimuth, where a camera offset is
+   * (r·sinφ·sinθ, r·cosφ, r·sinφ·cosθ). So θ=0 looks at Front (+z), θ=π/2 at
+   * Right (+x), θ=π at Back (−z), θ=−π/2 at Left (−x), all at the equator
+   * (φ=π/2); small φ looks down at Up (+y), φ≈π looks up at Down (−y). The
+   * radius is preserved from the current view so a face snap never zooms.
+   */
+  faceView: {
+    flyDuration: 0.9,
+    poses: {
+      F: { phi: Math.PI / 2, theta: 0 },
+      R: { phi: Math.PI / 2, theta: Math.PI / 2 },
+      B: { phi: Math.PI / 2, theta: Math.PI },
+      L: { phi: Math.PI / 2, theta: -Math.PI / 2 },
+      U: { phi: 0.2, theta: 0 },
+      D: { phi: Math.PI - 0.2, theta: 0 },
+    },
+  },
+
   /** Floating face-name labels that hover off each face. */
   label: {
     /** Distance from cube center to the label (face surface reaches ~1.5). */

@@ -109,7 +109,7 @@ export default function App() {
     if (store.isRotating) return;
     const step = store.solutionSteps[store.currentStepIndex];
     if (!step) return;
-    const expected = parseMoves(step.human);
+    const expected = parseMoves(step.drill);
     const target = expected[store.actionIndex];
     const user = parseMoves(moveStr)[0];
     if (target && user && drillMatch(user, target)) performDrillMove(target, expected.length);
@@ -123,7 +123,7 @@ export default function App() {
     if (store.mode !== 'learning' || store.isRotating) return;
     const step = store.solutionSteps[store.currentStepIndex];
     if (!step) return;
-    const expected = parseMoves(step.human);
+    const expected = parseMoves(step.drill);
     const target = expected[store.actionIndex];
     if (target) performDrillMove(target, expected.length);
   };
@@ -135,7 +135,7 @@ export default function App() {
     if (store.isRotating) return;
     const step = store.solutionSteps[store.currentStepIndex];
     if (!step) return;
-    const remaining = parseMoves(step.human).slice(store.actionIndex);
+    const remaining = parseMoves(step.drill).slice(store.actionIndex);
     if (remaining.length) cubeRef.current?.executeMove(formatMoves(remaining));
     store.advanceStep();
   };
@@ -245,7 +245,7 @@ export default function App() {
       </main>
 
       <footer className="text-center py-2 hidden md:block shrink-0">
-        <p className="text-[10px] text-faint font-medium tracking-widest uppercase">Drag to orbit • Keyboard letters turn faces</p>
+        <p className="text-[10px] text-faint font-medium tracking-widest uppercase">Drag to orbit • WASD/QE turn faces • IJKL/UO look at a face</p>
         <p className="text-[9px] text-faint/70 font-medium tracking-wider mt-1">
           Hand model “Low Poly Right Hand” by Raziq Brown, licensed{' '}
           <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noreferrer" className="underline hover:text-muted">CC-BY 3.0</a>

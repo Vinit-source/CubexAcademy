@@ -3,7 +3,7 @@ import { useStore, STAGES, STAGE_ORDER } from '../store';
 import { Play, CheckCircle2, Shuffle, RotateCcw, Gamepad2, GraduationCap, Trophy, Sparkles, Lightbulb, Settings, Video } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { StageDiagram } from './StageDiagram';
-import { parseMoves, type Move } from '../lib/cube-engine';
+import { parseMoves, formatMove, type Move, type FaceLetter } from '../lib/cube-engine';
 
 // Physical key -> cube face. WASD cluster drives Up/Down/Right/Left; Q/E the
 // Front/Back faces. Shift on any of them applies the inverse turn.
@@ -12,25 +12,47 @@ const KEY_TO_FACE: Record<string, string> = {
 };
 const FACE_TO_KEY: Record<string, string> = { U: 'W', D: 'S', R: 'D', L: 'A', F: 'Q', B: 'E' };
 
-// Physical key → cube face (tinted its cube color) + name. Bright hues are used
-// for legibility on the dark panel. Rendered in the real keyboard layout below.
+// Physical key -> cube face to *look at* (the camera snaps to face it head-on).
+// The I/J/K/L cluster plus its U/O neighbours form a view-pad laid out like the
+// keyboard: U I O over J K L → Front/Up/Back over Left/Down/Right. These never
+// turn the cube, so they're always live (even mid-rotation).
+const KEY_TO_VIEW: Record<string, FaceLetter> = {
+  I: 'U', K: 'D', J: 'L', L: 'R', U: 'F', O: 'B',
+};
+// View-pad rows + per-key metadata for the on-screen legend, matching the
+// physical U I O / J K L layout.
+const VIEW_ROWS = [['U', 'I', 'O'], ['J', 'K', 'L']];
+const VIEW_META: Record<string, { face: FaceLetter; name: string }> = {
+  U: { face: 'F', name: 'Front' }, I: { face: 'U', name: 'Up' }, O: { face: 'B', name: 'Back' },
+  J: { face: 'L', name: 'Left' }, K: { face: 'D', name: 'Down' }, L: { face: 'R', name: 'Right' },
+};
+
+// Each cube face tinted its sticker color — bright hues for legibility on the
+// dark panel. Shared by the Turn keys and the Look (view) keys.
+const FACE_TEXT_COLOR: Record<string, string> = {
+  F: 'text-emerald-400', U: 'text-slate-100', B: 'text-blue-400',
+  L: 'text-orange-400', D: 'text-yellow-400', R: 'text-red-500',
+};
+
+// Physical key → cube face (tinted its cube color) + name. Rendered in the real
+// keyboard layout below.
 const KEY_META: Record<string, { face: string; faceClass: string; name: string }> = {
-  Q: { face: 'F', faceClass: 'text-emerald-400', name: 'Front' },
-  W: { face: 'U', faceClass: 'text-slate-100', name: 'Up' },
-  E: { face: 'B', faceClass: 'text-blue-400', name: 'Back' },
-  A: { face: 'L', faceClass: 'text-orange-400', name: 'Left' },
-  S: { face: 'D', faceClass: 'text-yellow-400', name: 'Down' },
-  D: { face: 'R', faceClass: 'text-red-500', name: 'Right' },
+  Q: { face: 'F', faceClass: FACE_TEXT_COLOR.F, name: 'Front' },
+  W: { face: 'U', faceClass: FACE_TEXT_COLOR.U, name: 'Up' },
+  E: { face: 'B', faceClass: FACE_TEXT_COLOR.B, name: 'Back' },
+  A: { face: 'L', faceClass: FACE_TEXT_COLOR.L, name: 'Left' },
+  S: { face: 'D', faceClass: FACE_TEXT_COLOR.D, name: 'Down' },
+  D: { face: 'R', faceClass: FACE_TEXT_COLOR.R, name: 'Right' },
 };
 // Two staggered rows, exactly as they sit on a QWERTY keyboard.
 const KEY_ROWS = [['Q', 'W', 'E'], ['A', 'S', 'D']];
 
-// The physical key(s) to press for an expected move (Tutorial hint). Half turns
-// need two presses; wide/slice moves have no key, so the user taps the bar.
+// The physical key to press for an expected move (Tutorial hint). The drilled
+// sequence is already expanded to quarter turns, so every basic face move is a
+// single press; wide/slice moves have no key, so the user taps the bar.
 const keyHint = (m: Move): string => {
   const key = FACE_TO_KEY[m.face];
   if (m.wide || !key) return 'Tap bar';
-  if (m.dir === 2) return `${key} ×2`;
   if (m.dir === -1) return `⇧ ${key}`;
   return key;
 };
@@ -66,7 +88,8 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
     wrongPulse,
     isRotating,
     cameraAnimationsEnabled,
-    setCameraAnimationsEnabled
+    setCameraAnimationsEnabled,
+    requestFaceView
   } = useStore();
 
   // Canvas settings popover (top-right of the 3D panel).
@@ -81,8 +104,9 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
   const subStepIndex = currentStep
     ? solutionSteps.slice(0, currentStepIndex).filter((s) => s.stage === currentStep.stage).length
     : 0;
-  // The move tokens of the current step drive the progress bars.
-  const stepMoves: Move[] = currentStep ? parseMoves(currentStep.human) : [];
+  // The drilled (quarter-turn-expanded) move tokens drive the progress bars,
+  // key hints and per-move display, so a 180° turn is two presses of one bar.
+  const stepMoves: Move[] = currentStep ? parseMoves(currentStep.drill) : [];
 
   // Flash the active bar red briefly when the user makes a wrong move.
   const [flashWrong, setFlashWrong] = useState(false);
@@ -110,21 +134,28 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
   };
 
-  // Keyboard controls — WASD + Q/E map to cube faces (Shift = inverse).
+  // Keyboard controls — WASD + Q/E turn cube faces (Shift = inverse); I/J/K/L +
+  // U/O snap the camera to look at a face.
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (isRotating) return;
       const key = e.key.toUpperCase();
-      const shift = e.shiftKey;
 
+      // View keys are always live — they only move the camera, not the cube.
+      const view = KEY_TO_VIEW[key];
+      if (view) {
+        requestFaceView(view);
+        return;
+      }
+
+      if (isRotating) return;
       const face = KEY_TO_FACE[key];
       if (face) {
-        onExecuteMove(`${face}${shift ? "'" : ""}`);
+        onExecuteMove(`${face}${e.shiftKey ? "'" : ""}`);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isRotating, onExecuteMove]);
+  }, [isRotating, onExecuteMove, requestFaceView]);
 
   return (
     <>
@@ -297,7 +328,7 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
                 <kbd className="keycap px-2 py-0.5 font-mono text-xs font-bold">
                   {keyHint(stepMoves[actionIndex])}
                 </kbd>
-                <span className="text-xs font-mono font-bold text-brand-soft">{currentStep!.human.split(/\s+/)[actionIndex]}</span>
+                <span className="text-xs font-mono font-bold text-brand-soft">{formatMove(stepMoves[actionIndex])}</span>
               </div>
             )}
           </div>
@@ -313,7 +344,7 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
             ) : (
               <>
                 <div className="inline-block bg-brand/90 text-white backdrop-blur px-4 py-2 rounded-full text-sm font-mono font-bold tracking-widest shadow-lg shadow-brand/40">
-                  {currentStep!.human}
+                  {currentStep!.drill}
                 </div>
                 <p className="text-[10px] text-muted mt-2 font-bold uppercase tracking-widest drop-shadow-md">{currentStep!.label}</p>
               </>
@@ -406,45 +437,82 @@ export function UI({ onExecuteMove, onExecuteSolution, onDrillAction, onScramble
           </div>
         </div>
 
-        {/* Keys laid out like the keyboard: Q W E / A S D. Each cap turns its
-            face; the small tinted letter shows which. */}
-        <div className="hidden md:flex flex-col items-center gap-1.5 flex-1 justify-center">
-          {KEY_ROWS.map((row, ri) => (
-            <div key={ri} className={cn('flex gap-1.5', ri === 1 && 'ml-6')}>
-              {row.map((key) => {
-                const { face, faceClass, name } = KEY_META[key];
-                return (
-                  <button
-                    key={key}
-                    onClick={() => onExecuteMove(face)}
-                    disabled={isRotating}
-                    title={`${key} — turn the ${name} face`}
-                    className="keycap w-12 h-12 flex flex-col items-center justify-center leading-none"
-                  >
-                    <span className="font-mono text-sm font-bold">{key}</span>
-                    <span className={cn('text-[9px] font-bold mt-0.5', faceClass)}>{face}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+        {/* Two clusters, each laid out like the keyboard. Left (Q W E / A S D)
+            turns a face; right (U I O / J K L) snaps the camera to look at one. */}
+        <div className="hidden md:flex items-center justify-center gap-6 flex-1">
+          <div className="flex flex-col items-center gap-1.5">
+            <span className="text-[9px] font-black uppercase tracking-widest text-faint mb-0.5">Turn</span>
+            {KEY_ROWS.map((row, ri) => (
+              <div key={ri} className={cn('flex gap-1.5', ri === 1 && 'ml-6')}>
+                {row.map((key) => {
+                  const { face, faceClass, name } = KEY_META[key];
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => onExecuteMove(face)}
+                      disabled={isRotating}
+                      title={`${key} — turn the ${name} face`}
+                      className="keycap w-12 h-12 flex flex-col items-center justify-center leading-none"
+                    >
+                      <span className="font-mono text-sm font-bold">{key}</span>
+                      <span className={cn('text-[9px] font-bold mt-0.5', faceClass)}>{face}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-col items-center gap-1.5">
+            <span className="text-[9px] font-black uppercase tracking-widest text-faint mb-0.5">Look</span>
+            {VIEW_ROWS.map((row, ri) => (
+              <div key={ri} className="flex gap-1.5">
+                {row.map((key) => {
+                  const { face, name } = VIEW_META[key];
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => requestFaceView(face)}
+                      title={`${key} — look at the ${name} face`}
+                      className="keycap w-12 h-12 flex flex-col items-center justify-center leading-none"
+                    >
+                      <span className="font-mono text-sm font-bold">{key}</span>
+                      <span className={cn('text-[9px] font-bold mt-0.5', FACE_TEXT_COLOR[face])}>{face}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
         </div>
         <div className="hidden md:block mt-auto pt-3 text-[9px] text-faint font-medium uppercase tracking-widest text-center">
-          Hold Shift for the reverse turn (')
+          Hold Shift for the reverse turn (') · I J K L / U O look at a face
         </div>
 
         {/* Mobile Touch Controls */}
-        <div className="md:hidden grid grid-cols-4 gap-2 touch-manipulation flex-1">
-          {['R', 'L', 'U', 'D', 'F', 'B'].map((move) => (
-            <React.Fragment key={move}>
-              <button disabled={isRotating} onClick={() => onExecuteMove(move)} className="keycap text-sm py-2">
-                {move}
-              </button>
-              <button disabled={isRotating} onClick={() => onExecuteMove(`${move}'`)} className="keycap text-sm py-2">
-                {move}'
-              </button>
-            </React.Fragment>
-          ))}
+        <div className="md:hidden flex flex-col gap-2 flex-1">
+          <div>
+            <span className="text-[9px] font-black uppercase tracking-widest text-faint">Look at</span>
+            <div className="grid grid-cols-6 gap-1.5 mt-1">
+              {(['F', 'U', 'B', 'L', 'D', 'R'] as const).map((f) => (
+                <button key={f} onClick={() => requestFaceView(f)} className={cn('keycap text-[11px] font-bold py-1.5', FACE_TEXT_COLOR[f])} title={`Look at the ${f} face`}>
+                  {f}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-4 gap-2 touch-manipulation">
+            {['R', 'L', 'U', 'D', 'F', 'B'].map((move) => (
+              <React.Fragment key={move}>
+                <button disabled={isRotating} onClick={() => onExecuteMove(move)} className="keycap text-sm py-2">
+                  {move}
+                </button>
+                <button disabled={isRotating} onClick={() => onExecuteMove(`${move}'`)} className="keycap text-sm py-2">
+                  {move}'
+                </button>
+              </React.Fragment>
+            ))}
+          </div>
         </div>
       </div>
 

@@ -42,6 +42,7 @@ const STEPS: { tag: string; stage: Stage; title: string; color: string; body: st
 ];
 
 const TIPS = [
+  'Controls: W A S D turn Up/Left/Down/Right, Q/E turn Front/Back (hold Shift to reverse). Press I J K L (and U/O) to spin the camera to look straight at the Up/Left/Down/Right — and Front/Back — face.',
   'Notation: F R U D L B turn the Front/Right/Up/Down/Left/Back face clockwise. Add ’ for counter-clockwise (e.g. R’) and 2 for a 180° turn (e.g. U2). Lowercase = a wide, two-layer turn.',
   'Hold the cube with the cross on the bottom throughout, so you can watch the last layer.',
   'Beginners: use "2-look" OLL and PLL (about 16 short algorithms) before learning full CFOP’s 78.',
